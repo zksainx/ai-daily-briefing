@@ -39,6 +39,42 @@ class DailyBriefingTests(unittest.TestCase):
         self.assertIn("适合发 X 的选题", output)
         self.assertIn("今日选题素材", output)
 
+    def test_industry_profile_excludes_academic_web3_and_discovery_samples(self):
+        briefing = DailyBriefing(dry_run=True)
+        data = self.generate_quietly(briefing)
+        markdown = briefing.format_output(data, "markdown")
+
+        self.assertEqual(data["metadata"]["title"], "AI 工业界前沿简报")
+        self.assertIn("## 本日十条行业信号", markdown)
+        self.assertNotIn("新论文提出", markdown)
+        self.assertNotIn("Web3 热点", markdown)
+        self.assertNotIn("Hacker News", markdown)
+        self.assertNotIn("Hugging Face Trending", markdown)
+
+    def test_industry_highlights_fill_top_ten_and_filter_non_capital_infra(self):
+        briefing = DailyBriefing(dry_run=True)
+        candidates = [
+            {
+                "title": f"Company {index} launches an AI platform update",
+                "url": f"https://example.com/{index}",
+                "source": f"Official source {index % 5}",
+                "overall_score": 100 - index,
+                "section": "ai",
+            }
+            for index in range(12)
+        ]
+
+        highlights = briefing.generate_highlights(candidates)
+        self.assertEqual(len(highlights), 10)
+        infra_post = {
+            "title": "AI inference latency optimization for cloud serving",
+            "summary": "A practical guide to reduce model serving latency.",
+            "description": "",
+            "event_types": ["funding"],
+            "industry_track": "infrastructure",
+        }
+        self.assertFalse(briefing._looks_like_ai_funding(infra_post))
+
     def test_json_output_is_valid(self):
         briefing = DailyBriefing(dry_run=True)
         data = self.generate_quietly(briefing)
@@ -987,6 +1023,40 @@ class DailyBriefingTests(unittest.TestCase):
             "NVIDIA launches new AI inference infrastructure"
         ])
 
+    def test_specialist_ai_infrastructure_source_keeps_gpu_analysis(self):
+        briefing = DailyBriefing(dry_run=False, history_enabled=False)
+        briefing._get_content = lambda url: b"feed"
+        briefing._parse_feed_articles = lambda content, source, limit, max_age_days=None: [
+            {
+                "title": "HBM supply and GPU accelerator economics",
+                "summary": "An analysis of memory bandwidth and accelerator demand.",
+                "url": "https://example.com/hbm-gpu-analysis",
+                "source": source,
+            }
+        ]
+
+        rows = briefing._fetch_industry_feed(
+            {
+                "name": "SemiAnalysis",
+                "url": "https://newsletter.semianalysis.com/feed",
+                "track": "infrastructure",
+                "layer_hint": "upstream",
+                "authority": "media",
+                "discovery_only": True,
+                "role": "analysis",
+                "priority": "high",
+                "max_age_days": 21,
+                "allow_ai_infrastructure_signals": True,
+            },
+            4,
+        )
+
+        self.assertEqual([row["title"] for row in rows], [
+            "HBM supply and GPU accelerator economics"
+        ])
+        self.assertEqual(rows[0]["source_priority"], "high")
+        self.assertEqual(rows[0]["source_role"], "analysis")
+
     def test_non_model_github_release_prefers_product_update_event(self):
         briefing = DailyBriefing(dry_run=True)
         item = {
@@ -1359,7 +1429,7 @@ class DailyBriefingTests(unittest.TestCase):
         self.assertIn("credibility_score", queue[0])
         self.assertEqual(
             {item["section_key"] for item in queue},
-            {"ai", "web3", "venture", "github"},
+            {"ai", "venture", "github"},
         )
         self.assertTrue(
             any(item.get("signal_type") == "model_release" for item in queue)

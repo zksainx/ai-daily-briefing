@@ -1,0 +1,2 @@
+# One recipient per line. The real recipients.txt is ignored by Git.
+name@example.com

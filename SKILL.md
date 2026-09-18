@@ -30,7 +30,7 @@ skills/daily-briefing/scripts/run-daily-briefing.sh \
   --output-file outputs/editorial_packet.json
 ```
 
-先由 Python 抓取、去重、打分并记录跨日历史，再由当前 Codex 模型读取候选包，完成最终选稿、中文解释和 X 草稿。不得补写候选包里不存在的事实或数字，所有条目保留原始可点击链接。每个可点击条目下必须先用 1 至 2 句中文说明谁做了什么、关键结果或影响，不能只给链接、来源或评分。
+先由 Python 抓取、去重、打分并记录跨日历史，再由当前 Codex 模型读取候选包，完成最终选稿、中文解释和 X 草稿。不得补写候选包里不存在的事实或数字，所有条目保留原始可点击链接。每个可点击条目下必须先用 3 至 4 句中文说明谁做了什么、关键结果或影响，技术类再补充 3 至 4 句来源支持的技术说明，涵盖架构、接口、部署或测试设置。信息不足时可以少写，不重复或编造凑句数。
 
 保存 Codex 精编版后运行概括质检：
 
@@ -44,7 +44,7 @@ python skills/daily-briefing/scripts/validate-briefing.py outputs/briefing_YYYY-
 python briefing.py --dry-run --no-save
 ```
 
-Codex 精编版通过质检后，默认再生成同名交互 HTML：
+当前默认仅邮件交付：精编版通过质检后只保存 MD，由定时任务直接生成邮件正文并发送。仅在用户明确要求网页时生成同名交互 HTML：
 
 ```bash
 python skills/daily-briefing/scripts/render-briefing-html.py outputs/briefing_YYYY-MM-DD.md
@@ -93,7 +93,7 @@ python briefing.py --weekly-review
 
 周复盘包含持续信号、反馈偏好、来源成功率和下周动作。
 
-默认交付 Markdown 和同名交互 HTML，新闻标题和项目名都带可点击链接。排序同时参考内容价值、商业价值、个人匹配、时效和可信度；可信度标注为 `官方确认`、`多源印证` 或 `单源信号`。每条保留具体中文概括，不加“摘要”“一句话介绍”“中文总结”等前缀；质检器会拦截缺少概括、只有元数据或命中空泛模板的条目。
+默认保存 Markdown 并由定时任务发送邮件，新闻标题和项目名都带可点击链接。采集最多 80 条原始候选，由 Agent 阅读核验后选出最多 10 条；可信度标注为 `官方确认`、`多源印证` 或 `单源信号`。每条保留具体中文概括，不加“摘要”“一句话介绍”“中文总结”等前缀；质检器会拦截缺少概括、只有元数据或命中空泛模板的条目。独立网页 HTML 仅按明确请求生成。
 
 ## 重要规则
 

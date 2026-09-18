@@ -16,6 +16,7 @@ from bs4 import BeautifulSoup, Tag
 
 SECTION_KINDS = {
     "相比昨天的新变化": "change",
+    "本日十条行业信号": "must-read",
     "AI 产业链全景": "industry",
     "产业链联动": "industry",
     "最新模型发布": "model",

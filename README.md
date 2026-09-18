@@ -2,11 +2,11 @@
   <strong>简体中文</strong> | <a href="./README_EN.md">English</a>
 </p>
 
-# AI Daily Briefing
+# AI 工业界前沿简报
 
-给 AI/Web3 自媒体创作者用的每日情报与选题系统。它会从厂商官方源、产业基础设施、应用产品、资本市场、媒体、开发者社区、论文和开源生态收集候选信号，整理成带可点击链接的 Markdown 中文早报和可搜索、筛选、收藏的交互 HTML，并为 Codex 提供可二次精编的结构化候选包。
+面向课程汇报、组会和行业观察的 AI 工业界情报系统。默认只收集可核验的业界事件：模型与能力发布、产品和平台更新、AI 基础设施、产业采用及重大商业事件；覆盖国内外知名 AI 公司。每日生成带可点击出处的 Markdown/HTML，按周沉淀为可打印 PDF 的复盘。
 
-> **主打用法：在 Codex 里直接输入 `$daily-briefing 生成今日早报`，不需要 Hermes，也不需要打开 Telegram。**
+> **默认边界：不收 arXiv、论文、学术会议、纯 benchmark、Web3 或无来源的社区传闻。官方公告、模型卡、Release Notes、Changelog 与官方工程更新优先；媒体和社区只作发现或佐证。**
 
 ## 两种输出格式
 
@@ -66,31 +66,30 @@ Markdown 中的新闻标题和来源链接都可以直接点击。HTML 是不依
 
 ## 功能
 
-- AI 热点：TechCrunch、OpenAI、Google DeepMind、Hugging Face 官方更新
+- AI 工业界动态：国内外模型公司、云厂商、基础设施公司与 AI 产品公司的可核验更新
 - 最新模型发布：独立追踪厂商官网、官方 Changelog、官方模型卡与开源权重首发
 - 产品与工具更新：跟踪 AI 产品、新功能、API、价格、工作流与重要集成，不要求必须伴随新模型
 - AI 产业链全景：按上游算力与基础设施、中游模型与平台、下游应用与服务组织信号
 - 应用层趋势：补充客户采用、用户增长、行业落地、定价、收入和真实商业化证据
 - AI 投融资：独立跟踪融资、并购、IPO 和财报，并标注关键数字是否经过官方或多源核验
 - 产业链联动：连接跨层共同主题，同时明确区分“主题关联”和真实合作或因果关系
-- 可能爆火的 AI 新闻：从公司公告、开源项目、研究突破、融资并购、行业争议和高热社区讨论中筛选传播候选
+- 重要行业信号：从公司公告、产品发布、官方工程更新、重大融资并购和可信媒体报道中筛选
 - 官方模型组织：42 个官方 Hugging Face 组织，重点覆盖中美活跃模型团队
 - 官方发布页：19 个基础模型发布页 + 38 个 AI 编程、Agent、多模态和模型平台更新页
 - 官方账号雷达：62 个模型公司与 AI 产品 X 官方账号；Codex 可直接检索，配置 X API 后 Python 也能自动抓取
 - AI 编程/Agent：单独跟踪 Claude Code、Codex、Cursor、Copilot、Cognition/Devin、Replit、Manus
 - 多模态模型：单独跟踪 Runway、Stability AI、FLUX、Midjourney、Luma、Pika、Kling、Vidu
-- 补充信号：Hacker News、arXiv、Hugging Face Trending、AI HOT 精选
+- 补充信号：可选的 Hacker News、Hugging Face Trending、AI HOT 精选只用于发现，不会替代一手发布确认
 - 产业信号：自动抓取 NVIDIA、AWS、Google Cloud、Product Hunt、Crunchbase News、TechCrunch Venture、Data Center Dynamics，并把机器之心等无稳定 RSS 的入口交给 Codex 检索
 - 中国优先核验：补充 36Kr、IT桔子、港交所披露等检索入口，应用采用和融资数字必须回到一手来源确认
 - 官方追踪：Anthropic sitemap，以及 Codex、Claude Code、Gemini CLI、Transformers Releases
-- Web3 热点：CoinDesk 最新加密新闻
-- 投资 & 经济：TechCrunch Venture 分类新闻
+- 学术与 Web3：默认配置禁用；如研究任务确有需要，可在 `config.yaml` 中显式开启
 - GitHub 优质项目：GitHub Trending
-- 今日选题素材：把热点转成中文内容选题
+- 每日十条行业信号：优先展示模型、产品、基础设施和产业化的真正变化
 - Codex 友好：支持 `--dry-run` 离线验证、单元测试和稳定输出目录
 - 每条新闻/项目的可点击标题下都会紧跟 1 至 2 句具体中文概括，说明谁做了什么、关键结果或影响；不写空泛模板，也不额外加“摘要”等标签
 - Codex 保存早报后会运行 Markdown 质检器，自动拦截缺少中文概括、只有评分/来源或命中空泛模板的条目
-- 开头自动生成 `相比昨天的新变化`、`AI 产业链全景`、`产业链联动`、`最新模型发布`、`产品与工具更新`、`应用层趋势`、`AI 投融资与商业化`、`可能爆火的 AI 新闻`、`今日必须看`、`适合发 X`、`B端/商业机会` 和 `持续跟踪`
+- 开头自动生成 `本日十条行业信号`，再按模型、产品/Agent、产业链、采用/商业化、资本事件和持续观察展开
 - 用内容价值、商业价值、个人匹配、时效、可信度五个维度排序，综合分最高 96，避免大量虚高满分
 - 可信度区分 `官方确认`、`多源印证`、`单源信号`
 - X 草稿覆盖单帖、thread、视觉/视频脚本三种形态
@@ -207,7 +206,10 @@ python briefing.py --format html
 # 把 Codex 精编或手工修改后的 Markdown 转成交互 HTML
 python skills/daily-briefing/scripts/render-briefing-html.py outputs/briefing_YYYY-MM-DD.md
 
-# 输出 Codex 二次精编候选包
+# 每日工作流第 1 步：采集最多 80 条候选，不落盘
+python briefing.py --editorial-packet --no-save
+
+# 每日工作流第 1 步：保存候选包，交由 Codex 编辑选择最终十条
 python briefing.py --editorial-packet --output-file outputs/editorial_packet.json
 
 # 检查 Codex 精编后的每条链接是否紧跟具体中文概括
@@ -427,3 +429,10 @@ python briefing.py --no-save
 ## License
 
 MIT
+# 当前采集与编辑约定
+
+默认启用 `editorial.raw_candidates`：采集阶段不按 AI、行业或研究关键词删除内容。
+候选按来源轮流取近期条目，保留原始标题、摘要、链接及日期，最多 80 条；继续执行去重与日期检查。
+Python 输出为待编辑候选包，不自动生成规则 Top 10。
+由当前编辑 Agent 阅读全部候选、核验事实，按用户关注的 AI 工业界范围判断入选/不入选并记录理由，最终选择最多 10 条。
+这一步是编辑判断，不是多个独立模型投票；来源缺摘要时需要打开原文。

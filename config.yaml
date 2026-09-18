@@ -1,3 +1,26 @@
+# 编辑边界：这份简报只服务于 AI 工业界动态，不把论文或社区热帖当成成品。
+editorial:
+  raw_candidates: true
+  profile: "ai_industry"
+  title: "AI 工业界前沿简报"
+  include_academic: false
+  include_web3: false
+  include_discovery_sources: false
+  include_media_sources: true
+  include_community_sources: false
+  include_capital_signals: true
+  primary_source_required: true
+  daily_top_n: 10
+  scope:
+    - "基础模型与能力发布：LLM、推理、多模态、视频、音频、世界模型、具身智能"
+    - "产品与开发平台：Agent、AI 编程、模型 API、企业平台与重要功能更新"
+    - "基础设施：芯片、云、数据中心、训练、推理、部署与开源工程生态"
+    - "产业化：可核验的客户采用、定价、合作、融资、并购和财报"
+  exclusions:
+    - "arXiv、论文、学术会议、纯 benchmark 和纯理论研究"
+    - "Web3、加密货币和与 AI 无直接关系的融资新闻"
+    - "未被一手来源或多源报道证实的社区传闻"
+
 # 数据源配置
 sources:
   ai_news: "https://techcrunch.com/category/artificial-intelligence/"
@@ -12,9 +35,28 @@ sources:
   venture_news: "https://techcrunch.com/category/venture/"
   # 产业链独立信号源。official 可直接确认自身公告；media/community 只做发现。
   industry_feeds:
-    - {name: "NVIDIA Blog", url: "https://blogs.nvidia.com/feed/", track: "infrastructure", country: "US", layer_hint: "upstream", authority: "official"}
+    - {name: "NVIDIA Generative AI Blog", url: "https://developer.nvidia.com/blog/category/generative-ai/feed/", track: "infrastructure", country: "US", layer_hint: "upstream", authority: "official"}
     - {name: "AWS Machine Learning Blog", url: "https://aws.amazon.com/blogs/machine-learning/feed/", track: "infrastructure", country: "US", layer_hint: "upstream", authority: "official"}
     - {name: "Google Cloud AI", url: "https://cloudblog.withgoogle.com/products/ai-machine-learning/rss/", track: "infrastructure", country: "US", layer_hint: "midstream", authority: "official"}
+    # 媒体只承担召回和交叉核验，不与公司公告混为同一证据等级。
+    - {name: "量子位", url: "https://www.qbitai.com/feed", track: "applications", country: "CN", layer_hint: "downstream", authority: "media", discovery_only: true}
+    - {name: "The Decoder", url: "https://the-decoder.com/feed/", track: "applications", country: "EU", layer_hint: "midstream", authority: "media", discovery_only: true}
+    - {name: "Ars Technica Technology Lab", url: "https://feeds.arstechnica.com/arstechnica/technology-lab", track: "infrastructure", country: "US", layer_hint: "midstream", authority: "media", discovery_only: true}
+    - {name: "MIT Technology Review", url: "https://www.technologyreview.com/feed/", track: "applications", country: "US", layer_hint: "midstream", authority: "media", discovery_only: true}
+    # 主站是产品/订阅门户；文章归档由 Substack newsletter Feed 提供。
+    # 它是高价值的产业判断源，不替代公司公告对发布、价格与资本开支的确认。
+    - name: "SemiAnalysis"
+      url: "https://newsletter.semianalysis.com/feed"
+      track: "infrastructure"
+      country: "US"
+      layer_hint: "upstream"
+      authority: "media"
+      discovery_only: true
+      role: "analysis"
+      priority: "high"
+      max_age_days: 21
+      allow_ai_infrastructure_signals: true
+    - {name: "Cloudflare Blog", url: "https://blog.cloudflare.com/rss/", track: "infrastructure", country: "US", layer_hint: "midstream", authority: "official"}
     - {name: "Product Hunt", url: "https://www.producthunt.com/feed", track: "applications", country: "GLOBAL", layer_hint: "downstream", authority: "community", discovery_only: true}
     - {name: "Crunchbase News", url: "https://news.crunchbase.com/feed/", track: "capital", country: "GLOBAL", layer_hint: "downstream", authority: "media", discovery_only: true}
     - {name: "TechCrunch Venture RSS", url: "https://techcrunch.com/category/venture/feed/", track: "capital", country: "GLOBAL", layer_hint: "downstream", authority: "media", discovery_only: true}
@@ -273,16 +315,16 @@ output:
 limits:
   ai_news: 10
   ai_official_per_source: 3
-  web3_news: 3
-  venture_news: 5
-  github_projects: 10
-  topics: 5
-  highlights: 5
-  x_topics: 5
-  x_drafts: 3
+  web3_news: 0
+  venture_news: 3
+  github_projects: 4
+  topics: 0
+  highlights: 10
+  x_topics: 0
+  x_drafts: 0
   hacker_news: 5
-  arxiv: 4
-  huggingface_models: 4
+  arxiv: 0
+  huggingface_models: 0
   official_model_releases_per_org: 2
   model_changelog_per_source: 3
   model_releases: 8
@@ -292,7 +334,7 @@ limits:
   application_trends: 6
   ai_funding: 6
   industry_feed_per_source: 4
-  industry_signals: 24
+  industry_signals: 40
   cross_layer_connections: 3
   official_x_updates: 12
   official_social_updates: 8
@@ -303,11 +345,13 @@ limits:
   changes: 5
   business_opportunities: 5
   watchlist: 5
-  editorial_queue: 20
+  # 给编辑/Agent 复核的候选池；最终十条由语义判断选择，不直接照分数截断。
+  editorial_queue: 80
 
 # 网络请求配置
 request:
-  timeout: 25
+  # 单源慢或失效时快速降级，避免拖慢每日候选池。
+  timeout: 10
   user_agent: "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Safari/537.36"
 
 # 内容质量控制：限制过旧官方更新，并合并同一事件的重复报道。
@@ -326,7 +370,7 @@ history:
 
 # Rion 个性化排序。它会进入五维评分中的「个人匹配」，不是唯一排序依据。
 personalization:
-  enabled: true
+  enabled: false
   baseline: 36
   section_boosts:
     ai: 6

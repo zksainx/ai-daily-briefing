@@ -80,6 +80,19 @@ DEFAULT_CONFIG: Dict[str, Any] = {
                 "authority": "official",
             },
             {
+                "name": "SemiAnalysis",
+                "url": "https://newsletter.semianalysis.com/feed",
+                "track": "infrastructure",
+                "country": "US",
+                "layer_hint": "upstream",
+                "authority": "media",
+                "discovery_only": True,
+                "role": "analysis",
+                "priority": "high",
+                "max_age_days": 21,
+                "allow_ai_infrastructure_signals": True,
+            },
+            {
                 "name": "Product Hunt",
                 "url": "https://www.producthunt.com/feed",
                 "track": "applications",
@@ -407,7 +420,7 @@ DEFAULT_CONFIG: Dict[str, Any] = {
         "changes": 5,
         "business_opportunities": 5,
         "watchlist": 5,
-        "editorial_queue": 20,
+        "editorial_queue": 80,
     },
     "request": {
         "timeout": 25,
@@ -950,6 +963,84 @@ class DailyBriefing:
     def _limit(self, key: str) -> int:
         return int(self.config.get("limits", {}).get(key, DEFAULT_CONFIG["limits"][key]))
 
+    def _editorial(self) -> Dict[str, Any]:
+        value = self.config.get("editorial", {})
+        return value if isinstance(value, dict) else {}
+
+    def _is_industry_profile(self) -> bool:
+        return clean_text(self._editorial().get("profile", "")).lower() == "ai_industry"
+
+    def _editorial_flag(self, key: str, default: bool) -> bool:
+        return bool(self._editorial().get(key, default))
+
+    def _raw_candidates_enabled(self) -> bool:
+        return self._editorial_flag("raw_candidates", False)
+
+    def _report_title(self) -> str:
+        return clean_text(self._editorial().get("title", "")) or "AI 工业界前沿简报"
+
+    def _is_academic_item(self, item: Dict[str, Any]) -> bool:
+        source = clean_text(item.get("source", "")).lower()
+        url = clean_text(item.get("url", "")).lower()
+        return source == "arxiv" or "arxiv.org" in url
+
+    def _keep_industry_item(self, item: Dict[str, Any], section: str) -> bool:
+        """Apply the strict industry-only boundary after items have been enriched."""
+        if self._raw_candidates_enabled():
+            return True
+        if not self._is_industry_profile():
+            return True
+        if section == "web3" or self._is_academic_item(item):
+            return False
+        source = clean_text(item.get("source", "")).lower()
+        if not self._editorial_flag("include_discovery_sources", True) and any(
+            marker in source
+            for marker in ("hacker news", "hugging face trending", "ai hot")
+        ):
+            return False
+        text = " ".join(
+            [
+                item_title(item),
+                clean_text(item.get("summary", "")),
+                clean_text(item.get("description", "")),
+            ]
+        ).lower()
+        if has_any_keyword(
+            text,
+            ("web3", "crypto", "bitcoin", "blockchain", "solana", "链上", "加密货币"),
+        ):
+            return False
+        if (
+            not self._editorial_flag("include_capital_signals", True)
+            and section == "venture"
+        ):
+            return False
+
+        event_types = set(item.get("event_types", []))
+        if "research" in event_types and not item.get("official"):
+            return False
+
+        # Media broadens coverage of startups, adoption and market moves, but its
+        # claims remain explicitly attributable and receive editorial verification
+        # before publication. Community feeds stay out unless enabled separately.
+        authority = clean_text(item.get("source_authority", "")).lower()
+        if authority == "media" and not self._editorial_flag(
+            "include_media_sources", True
+        ):
+            return False
+        if authority == "community" and not self._editorial_flag(
+            "include_community_sources", False
+        ):
+            return False
+        if self._editorial_flag("primary_source_required", True):
+            if (
+                item.get("discovery_only")
+                and authority not in {"media"}
+                and not item.get("official")
+            ):
+                return False
+        return self._is_ai_relevant(item)
+
     def _within_requested_window(self, item: Dict[str, Any]) -> bool:
         if self.lookback_hours is None:
             return True
@@ -999,6 +1090,8 @@ class DailyBriefing:
     def _matches_request(self, item: Dict[str, Any]) -> bool:
         if not self._within_requested_window(item):
             return False
+        if self._raw_candidates_enabled():
+            return True
         if self.briefing_mode == "models":
             if item.get("signal_type") != "model_release":
                 return False
@@ -1093,6 +1186,7 @@ class DailyBriefing:
         content: Any,
         source: str,
         limit: int,
+        max_age_days: Optional[int] = None,
     ) -> List[Dict[str, str]]:
         root = ElementTree.fromstring(content)
         entries = [
@@ -1100,9 +1194,10 @@ class DailyBriefing:
             for element in root.iter()
             if element.tag.rsplit("}", 1)[-1].lower() in {"item", "entry"}
         ]
-        max_age_days = int(
-            self.config.get("quality", {}).get("max_feed_age_days", 10)
-        )
+        if max_age_days is None:
+            max_age_days = int(
+                self.config.get("quality", {}).get("max_feed_age_days", 10)
+            )
         articles: List[Dict[str, str]] = []
 
         for entry in entries:
@@ -1257,7 +1352,14 @@ class DailyBriefing:
             return []
         started_at = monotonic()
         try:
-            rows = self._parse_feed_articles(self._get_content(url), source, limit * 3)
+            source_max_age_days = source_config.get("max_age_days")
+            content = self._get_content(url)
+            if source_max_age_days is None:
+                rows = self._parse_feed_articles(content, source, limit * 3)
+            else:
+                rows = self._parse_feed_articles(
+                    content, source, limit * 3, int(source_max_age_days)
+                )
             enriched: List[Dict[str, Any]] = []
             for row in rows:
                 title_lower = item_title(row).lower()
@@ -1268,7 +1370,7 @@ class DailyBriefing:
                     "great place to work",
                     "employee ranking",
                 )
-                if has_any_keyword(title_lower, off_topic_markers):
+                if not self._raw_candidates_enabled() and has_any_keyword(title_lower, off_topic_markers):
                     continue
                 row["industry_track"] = clean_text(
                     source_config.get("track", "applications")
@@ -1285,10 +1387,17 @@ class DailyBriefing:
                 row["discovery_only"] = bool(
                     source_config.get("discovery_only", False)
                 )
+                row["source_role"] = clean_text(source_config.get("role", ""))
+                row["source_priority"] = clean_text(
+                    source_config.get("priority", "")
+                )
                 if row["source_authority"] == "official":
                     row["official"] = True
                     self._mark_official_model_release(row)
-                if not self._is_ai_relevant(row):
+                is_relevant = self._is_ai_relevant(row)
+                if source_config.get("allow_ai_infrastructure_signals"):
+                    is_relevant = is_relevant or self._is_ai_infrastructure_relevant(row)
+                if not self._raw_candidates_enabled() and not is_relevant:
                     continue
                 enriched.append(row)
                 if len(enriched) >= limit:
@@ -1483,6 +1592,37 @@ class DailyBriefing:
             "智能体",
         )
         return has_any_keyword(text, ai_keywords)
+
+    def _is_ai_infrastructure_relevant(self, item: Dict[str, str]) -> bool:
+        """Keep specialist infrastructure analysis even when its title omits 'AI'."""
+        text = " ".join(
+            [
+                item_title(item),
+                clean_text(item.get("summary", "")),
+            ]
+        ).lower()
+        infrastructure_keywords = (
+            "gpu",
+            "tpu",
+            "accelerator",
+            "hbm",
+            "cuda",
+            "nvlink",
+            "inference",
+            "training cluster",
+            "data center",
+            "datacenter",
+            "neocloud",
+            "ai cloud",
+            "interconnect",
+            "co-packaged optics",
+            "cpo",
+            "advanced packaging",
+            "liquid cooling",
+            "power rack",
+            "ai capex",
+        )
+        return has_any_keyword(text, infrastructure_keywords)
 
     def _round_robin(
         self,
@@ -1840,7 +1980,8 @@ class DailyBriefing:
                 ["h2 a", "h3 a", "a.loop-card__title-link", "a.post-block__title__link"],
             )
             relevant_candidates = [
-                article for article in candidates if self._is_ai_relevant(article)
+                article for article in candidates
+                if self._raw_candidates_enabled() or self._is_ai_relevant(article)
             ]
             media_articles = relevant_candidates[:limit]
             filtered_count = len(candidates) - len(relevant_candidates)
@@ -1858,11 +1999,19 @@ class DailyBriefing:
         official_sources = self.config.get("sources", {}).get("ai_official", [])
         official_limit = self._limit("ai_official_per_source")
         if isinstance(official_sources, list) and official_limit > 0:
-            for source_config in official_sources:
-                if not isinstance(source_config, dict):
-                    continue
-                official_groups.append(
-                    self._fetch_feed_articles(source_config, official_limit)
+            configs = [
+                source_config
+                for source_config in official_sources
+                if isinstance(source_config, dict)
+            ]
+            with ThreadPoolExecutor(max_workers=min(6, len(configs)) or 1) as executor:
+                official_groups = list(
+                    executor.map(
+                        lambda source_config: self._fetch_feed_articles(
+                            source_config, official_limit
+                        ),
+                        configs,
+                    )
                 )
 
         official_articles = self._round_robin(
@@ -2718,26 +2867,38 @@ class DailyBriefing:
         return rows
 
     def fetch_ecosystem_signals(self) -> List[Dict[str, Any]]:
-        """Build a diverse candidate pool from community, research and official sources."""
+        """Build a candidate pool, respecting the configured editorial boundary."""
         limit = self._limit("ecosystem_signals")
         if self.dry_run:
             return self._sample("ecosystem_signals", limit)
-        groups = [
-            self.fetch_official_model_orgs(),
-            self.fetch_model_changelogs(),
-            self.fetch_official_x_updates(),
-            self.fetch_hacker_news(),
-            self.fetch_arxiv(),
-            self.fetch_huggingface_models(),
-            self.fetch_aihot(),
-            self.fetch_official_sitemaps(),
-            self.fetch_github_releases(),
+        fetchers = [
+            self.fetch_official_model_orgs,
+            self.fetch_model_changelogs,
+            self.fetch_official_x_updates,
+            self.fetch_official_sitemaps,
+            self.fetch_github_releases,
         ]
+        with ThreadPoolExecutor(max_workers=len(fetchers)) as executor:
+            groups = list(executor.map(lambda fetch: fetch(), fetchers))
+        if not self._is_industry_profile() or self._editorial_flag(
+            "include_discovery_sources", True
+        ):
+            groups.extend([self.fetch_hacker_news(), self.fetch_aihot()])
+        if not self._is_industry_profile() or self._editorial_flag(
+            "include_academic", True
+        ):
+            groups.append(self.fetch_arxiv())
+        if not self._is_industry_profile():
+            groups.append(self.fetch_huggingface_models())
         rows = self._round_robin(groups, sum(len(group) for group in groups))
         return self._dedupe_items(rows)[:limit]
 
     def fetch_web3_news(self, limit: Optional[int] = None) -> List[Dict[str, str]]:
         """抓取 Web3 热点新闻。"""
+        if self._is_industry_profile() and not self._editorial_flag(
+            "include_web3", False
+        ):
+            return []
         limit = limit or self._limit("web3_news")
         self._log("正在抓取 Web3 热点...")
         if self.dry_run:
@@ -2801,6 +2962,10 @@ class DailyBriefing:
 
     def fetch_venture_news(self, limit: Optional[int] = None) -> List[Dict[str, str]]:
         """抓取投资和融资新闻。"""
+        if self._is_industry_profile() and not self._editorial_flag(
+            "include_capital_signals", True
+        ):
+            return []
         limit = limit or self._limit("venture_news")
         self._log("正在抓取投资经济新闻...")
         if self.dry_run:
@@ -2817,7 +2982,9 @@ class DailyBriefing:
                 limit,
                 ["h2 a", "h3 a", "a.loop-card__title-link", "a.post-block__title__link"],
             )
-            self._log(f"获取到 {len(articles)} 条投资新闻")
+            if not self._raw_candidates_enabled():
+                articles = [article for article in articles if self._is_ai_relevant(article)]
+            self._log(f"获取到 {len(articles)} 条 AI 投资新闻")
             self._record_source_health(
                 "TechCrunch Venture", started_at, len(articles)
             )
@@ -3786,6 +3953,9 @@ class DailyBriefing:
             return []
 
         ranked = self._ranked_items(items)
+        if self._is_industry_profile():
+            return self._generate_industry_highlights(ranked, limit)
+
         highlights: List[Dict[str, Any]] = []
         seen_keys = set()
         seen_categories = set()
@@ -3827,6 +3997,44 @@ class DailyBriefing:
 
         for item in ranked:
             add_item(item, enforce_cap=False)
+            if len(highlights) >= limit:
+                break
+        return highlights
+
+    def _generate_industry_highlights(
+        self, ranked_items: List[Dict[str, Any]], limit: int
+    ) -> List[Dict[str, Any]]:
+        """Select a daily top list from all verified industry candidates.
+
+        The legacy selector assumes four editorial sections and can stop early when
+        several company announcements share a category. Industry briefings instead
+        need a complete, source-diverse top-N list.
+        """
+        highlights: List[Dict[str, Any]] = []
+        seen_keys = set()
+        source_counts: Dict[str, int] = {}
+
+        def add_item(item: Dict[str, Any], *, enforce_source_cap: bool) -> bool:
+            key = item.get("url") or item.get("display_title", "")
+            if not key or key in seen_keys:
+                return False
+            source = item.get("source", "") or "unknown"
+            if enforce_source_cap and source_counts.get(source, 0) >= 2:
+                return False
+            highlights.append(self._briefing_entry(item))
+            seen_keys.add(key)
+            source_counts[source] = source_counts.get(source, 0) + 1
+            return True
+
+        for item in ranked_items:
+            add_item(item, enforce_source_cap=True)
+            if len(highlights) >= limit:
+                return highlights
+
+        # A quiet news day can legitimately have only one or two active sources.
+        # Fill remaining slots without relaxing deduplication in that case.
+        for item in ranked_items:
+            add_item(item, enforce_source_cap=False)
             if len(highlights) >= limit:
                 break
         return highlights
@@ -4056,20 +4264,13 @@ class DailyBriefing:
         ]
 
     def _looks_like_ai_funding(self, item: Dict[str, Any]) -> bool:
-        if set(item.get("event_types", [])) & {
-            "funding",
-            "acquisition",
-            "ipo",
-            "earnings",
-        }:
-            return self._is_ai_relevant(item)
+        # Use source text rather than inferred event labels here. Older enrichment
+        # rules may assign a capital tag from incidental context in an infra post.
         text = " ".join(
             [
                 item_title(item),
                 clean_text(item.get("summary", "")),
-                clean_text(item.get("summary_cn", "")),
-                clean_text(item.get("category", "")),
-                " ".join(item.get("tags", [])),
+                clean_text(item.get("description", "")),
             ]
         ).lower()
         finance_markers = (
@@ -4227,6 +4428,26 @@ class DailyBriefing:
         items: List[Dict[str, Any]],
     ) -> List[Dict[str, Any]]:
         limit = self._limit("editorial_queue")
+        if self._raw_candidates_enabled():
+            groups: Dict[str, List[Dict[str, Any]]] = {}
+            for item in items:
+                groups.setdefault(item.get("source", "unknown"), []).append(item)
+            for group in groups.values():
+                group.sort(key=lambda row: row.get("published_at", "") or row.get("time", ""), reverse=True)
+            selected = self._round_robin([groups[key] for key in sorted(groups)], limit)
+            return [
+                {
+                    "title": item_title(item),
+                    "url": item.get("url", ""),
+                    "source": item.get("source", ""),
+                    "published_at": item.get("published_at", ""),
+                    "time": item.get("time", ""),
+                    "raw_summary": item.get("summary", "") or item.get("description", ""),
+                    "related_links": item.get("related_links", []),
+                    "editorial_status": "pending",
+                }
+                for item in selected
+            ]
         ranked = self._ranked_items(items)
         selected: List[Dict[str, Any]] = []
         seen_keys = set()
@@ -4712,9 +4933,25 @@ class DailyBriefing:
 
         now = datetime.now()
         run_date = now.strftime("%Y-%m-%d")
-        base_ai_news = self.fetch_ai_news()
-        ecosystem_signals = self.fetch_ecosystem_signals()
-        industry_signals = self.fetch_industry_signals()
+        # These retrieval paths do not depend on one another. Run them together so
+        # one slow public feed degrades only its own source, not the entire daily run.
+        fetchers = [
+            self.fetch_ai_news,
+            self.fetch_ecosystem_signals,
+            self.fetch_industry_signals,
+            self.fetch_web3_news,
+            self.fetch_venture_news,
+            self.fetch_github_trending,
+        ]
+        with ThreadPoolExecutor(max_workers=len(fetchers)) as executor:
+            (
+                base_ai_news,
+                ecosystem_signals,
+                industry_signals,
+                web3_news,
+                base_venture_news,
+                github_projects,
+            ) = list(executor.map(lambda fetch: fetch(), fetchers))
         industry_ai_signals = [
             item
             for item in industry_signals
@@ -4733,8 +4970,6 @@ class DailyBriefing:
                 + len(industry_ai_signals),
             )
         )
-        web3_news = self.fetch_web3_news()
-        base_venture_news = self.fetch_venture_news()
         venture_news = self._dedupe_items(
             self._round_robin(
                 [base_venture_news, industry_capital_signals],
@@ -4749,8 +4984,21 @@ class DailyBriefing:
         ai_news = news_sections["ai"]
         web3_news = news_sections["web3"]
         venture_news = news_sections["venture"]
-        github_projects = self.fetch_github_trending()
         self.enrich_items(ai_news, web3_news, venture_news, github_projects)
+        if self._is_industry_profile():
+            ai_news = [
+                item for item in ai_news if self._keep_industry_item(item, "ai")
+            ]
+            venture_news = [
+                item
+                for item in venture_news
+                if self._keep_industry_item(item, "venture")
+            ]
+            github_projects = [
+                item
+                for item in github_projects
+                if self._keep_industry_item(item, "github")
+            ]
         raw_items = ai_news + web3_news + venture_news + github_projects
         if self.history_store is not None:
             self.history_store.apply_feedback(raw_items)
@@ -4841,7 +5089,9 @@ class DailyBriefing:
                     item[field] = history_item[field]
         ranked_items = self._ranked_items(all_items)
 
-        highlights = self.generate_highlights(ranked_items)
+        highlights = self.generate_highlights(
+            ranked_candidates if self._is_industry_profile() else ranked_items
+        ) if not self._raw_candidates_enabled() else []
         changes = self.generate_changes(ranked_items)
         business_opportunities = self.generate_business_opportunities(ranked_items)
         watchlist = self.generate_watchlist(ranked_items)
@@ -4868,14 +5118,19 @@ class DailyBriefing:
             for item in ai_news
             if item.get("signal_type") not in {"model_release", "official_social"}
         ]
-        x_topics = self.generate_x_topics(all_items)
-        x_drafts = self.generate_x_drafts(all_items)
-        topics = self.generate_topics(
-            general_ai_news,
-            web3_news,
-            venture_news,
-            github_projects,
-        )
+        if self._is_industry_profile():
+            x_topics = []
+            x_drafts = []
+            topics = []
+        else:
+            x_topics = self.generate_x_topics(all_items)
+            x_drafts = self.generate_x_drafts(all_items)
+            topics = self.generate_topics(
+                general_ai_news,
+                web3_news,
+                venture_news,
+                github_projects,
+            )
         editorial_queue = self.generate_editorial_queue(ranked_candidates)
 
         if self.history_store is not None:
@@ -4887,13 +5142,27 @@ class DailyBriefing:
 
         return {
             "metadata": {
-                "title": "Rion 每日早报",
+                "title": self._report_title()
+                if self._is_industry_profile()
+                else "Rion 每日早报",
                 "generated_at": now.isoformat(timespec="seconds"),
                 "date": now.strftime("%Y.%m.%d"),
                 "weekday": chinese_weekday(now),
                 "dry_run": self.dry_run,
                 "history_enabled": self.history_store is not None,
                 "editorial_mode": "codex-ready",
+                "editorial_review": {
+                    "status": "pending" if self._raw_candidates_enabled() else "rule_preview",
+                    "candidate_selection": "source_round_robin_recent_first" if self._raw_candidates_enabled() else "rule_ranked",
+                    "candidate_pool_limit": self._limit("editorial_queue"),
+                    "target_count": int(
+                        self._editorial().get("daily_top_n", 10)
+                    ),
+                    "selection_method": "agent_editorial_judgment",
+                    "shortfall_policy": (
+                        "report_fewer_items_instead_of_filling_with_stale_or_low-signal_content"
+                    ),
+                },
                 "candidate_count": len(ranked_candidates),
                 "unfiltered_candidate_count": unfiltered_candidate_count,
                 "request": {
@@ -4921,13 +5190,19 @@ class DailyBriefing:
                     ),
                     "watchlist_count": len(self.industry_source_watchlist()),
                     "search_group_count": len(self.industry_search_groups()),
-                    "capital_is_cross_cutting": True,
+                    "capital_is_cross_cutting": self._editorial_flag(
+                        "include_capital_signals", True
+                    ),
                 },
                 "editorial_instructions": [
+                    "原始候选不按关键词筛选。编辑须逐条阅读全部候选，在内部判断其与用户关注方向的相关性、事实依据、时效和产业影响，再选出最多十条。这里的判断/投票由当前编辑 Agent 完成，不代表多个独立模型投票；入选或不入选理由只保留在临时推理记录，不写入最终 Top 10。原始抓取包不等于最终简报；focus 和 mode 的语义边界由编辑执行。",
                     "只保留能核验的事实和原始链接，不补写来源中没有的数字。",
+                    "先阅读 sections.editorial_queue 中最多 80 条候选，再由编辑 Agent 独立选择最终十条；不得直接照搬 sections.highlights 的规则排序。优先实质发布、生产部署、产业影响和跨层代表性，压低奖项、营销稿、重复版本和泛案例文章。",
+                    "最终十条不足时如实少报，不用旧闻、低可信媒体转述或无实质变化的内容填充数量。",
+                    "当前简报聚焦 AI 工业界：不把 arXiv、论文、学术会议或纯理论研究编入成品；模型、产品、基础设施和商业事件优先引用公司公告、模型卡、Changelog、Release 或可核验披露。",
                     "优先选择新变化、多源印证、官方更新和可转成内容或商业动作的信号。",
                     "模型发布必须优先引用厂商官网、官方 Changelog、官方模型卡或官方 Release，不用媒体转述替代发布确认。",
-                    "先检查 sections.model_releases，再处理一般热点；说明模型类型、发布时间、可用渠道和仍需验证的限制。",
+                    "先检查 sections.model_releases，再处理一般热点；说明模型类型、发布时间、可用渠道和来源已经披露的技术细节，未披露的信息不要补写。",
                     "并行检查 sections.product_updates 和 sections.viral_ai_news；简报必须同时覆盖模型、产品/功能更新和可能爆火的 AI 新闻，不能只做模型发布榜。",
                     "爆火候选可包括重大公司公告、开源项目、研究突破、融资并购、价格或 API 变化、行业争议与高热社区讨论，但必须保留可信度标签。",
                     "用 sections.industry_chain 串联上游算力与基础设施、中游模型与平台、下游应用与服务；资本是跨层事件类型，不得把融资公司从原产业层移走。",
@@ -4937,8 +5212,8 @@ class DailyBriefing:
                     "严格遵守 metadata.request：mode=models 时同时包含模型首发、版本升级、能力更新、API 可用性和模型价格变化；focus 有值时只保留该赛道或行业；lookback_hours 有值时保留该时间段内的热点，并说明边界口径。",
                     "检查 sections.official_social_updates；若为空，按 sections.official_x_watchlist 搜索请求时间窗内的官方 X 帖子，并保留 x.com 原帖链接。",
                     "执行 sections.official_x_search_groups 的全部批次；CN 批次优先，未完成时不得把账号已配置写成已经检索。",
-                    "每一条保留到最终简报的新闻、模型、产品、融资、官方 X 动态或开源项目，都必须在可点击标题下一行写 1 至 2 句简短中文概括。概括必须包含主体、具体动作或变化，以及最关键的结果、数字或影响；只写来源明确支持的事实。",
-                    "不得用‘值得关注’‘可作为行业观察’‘核心看点是工具链还不成熟’等通用判断代替新闻概括，也不得只留下标题、链接、标签或评分。写完后逐条检查所有可点击条目是否都有不重复的具体中文概括。",
+                    "每一条保留到最终简报的新闻、模型、产品、融资、官方 X 动态或开源项目，都必须在可点击标题下一行写 3 至 4 句中文新闻概括；概括要交代主体、具体动作或变化，以及最关键的结果、数字或影响。技术类条目再补 3 至 4 句事实型技术描述，说明架构、接口、部署方式、实现变化或基准测试设置。每句话补充不同的信息，来源信息不足时可以少写，不重复或编造凑句数。最终条目只写发生了什么和技术上做了什么，不写‘入选理由’‘为什么重要’或编辑评价。",
+                    "不得用‘值得关注’‘可作为行业观察’‘核心看点是工具链还不成熟’等通用判断代替新闻概括，也不得只留下标题、链接、标签或评分。避免在条目结尾追加‘这不代表……’‘不能据此认为……’‘仍需……’等反驳式或免责声明式句子；不确定性保留在来源/可信度元数据中。写完后逐条检查所有可点击条目是否都有不重复的具体中文概括。",
                     "不要在概括前添加‘中文总结’‘摘要’或‘一句话介绍’标签。X 草稿按单帖、thread、视觉或视频脚本区分。",
                 ],
             },
@@ -4988,6 +5263,8 @@ class DailyBriefing:
                 self._format_markdown(data),
                 source_filename=f"briefing_{datetime.now():%Y-%m-%d}.md",
             )
+        if self._is_industry_profile():
+            return self._format_industry_markdown(data)
         return self._format_text(data)
 
     def record_feedback(
@@ -5006,7 +5283,11 @@ class DailyBriefing:
         summary = self.history_store.weekly_summary(days=days)
         return {
             "metadata": {
-                "title": "Rion AI 简报周复盘",
+                "title": (
+                    f"{self._report_title()} · 周度复盘"
+                    if self._is_industry_profile()
+                    else "Rion AI 简报周复盘"
+                ),
                 "generated_at": datetime.now().isoformat(timespec="seconds"),
             },
             **summary,
@@ -5022,11 +5303,22 @@ class DailyBriefing:
 
         period = data["period"]
         lines = [
-            f"# Rion AI 简报周复盘 · {period['start']} 至 {period['end']}",
-            "",
-            "## 本周持续信号",
+            f"# {data['metadata']['title']} · {period['start']} 至 {period['end']}",
             "",
         ]
+        if self._is_industry_profile():
+            lines.extend(
+                [
+                    "> 本报告从每日已核验的 AI 行业事件中提取持续信号；不纳入论文、学术会议或 Web3 信息。",
+                    "",
+                ]
+            )
+        lines.extend(
+            [
+            "## 本周持续信号",
+            "",
+            ]
+        )
         top_items = data.get("top_items", [])
         if not top_items:
             lines.append("- 暂无历史数据，先正常生成几天早报后再复盘。")
@@ -5227,7 +5519,94 @@ class DailyBriefing:
         )
         return "\n".join(lines)
 
+    def _format_industry_markdown(self, data: Dict[str, Any]) -> str:
+        """Render a shareable industry briefing without creator- or academic-only sections."""
+        meta = data["metadata"]
+        sections = data["sections"]
+        if self._raw_candidates_enabled():
+            lines = [f"# 原始候选采集 · {meta['date']}", "", "> 等待编辑逐条判断并选择 Top 10；以下为来源原始信息。", ""]
+            for index, item in enumerate(sections.get("editorial_queue", []), 1):
+                lines.extend([
+                    f"## {index}. [{item['title']}]({item['url']})",
+                    "",
+                    f"来源：{item['source']} · {item.get('published_at') or item.get('time') or '日期待核验'}",
+                    "",
+                    item.get("raw_summary", "") or "来源未提供摘要。",
+                    "",
+                ])
+            return "\n".join(lines)
+        scope = self._editorial().get("scope", [])
+        lines = [f"# {meta['title']} · {meta['date']} {meta['weekday']}", ""]
+        request = meta.get("request", {})
+        if any(
+            request.get(key) not in {None, "", "all"}
+            for key in ("mode", "focus", "lookback_hours")
+        ):
+            parts = []
+            if request.get("mode") and request["mode"] != "all":
+                parts.append(f"模式：`{request['mode']}`")
+            if request.get("focus"):
+                parts.append(f"方向：`{request['focus']}`")
+            if request.get("lookback_hours"):
+                parts.append(f"时间：过去 `{request['lookback_hours']}` 小时")
+            lines.extend([f"> {' · '.join(parts)}", ""])
+        if scope:
+            lines.extend([f"> 关注范围：{'；'.join(scope)}", ""])
+        lines.extend(
+            [
+                "> 口径：优先公司公告、模型卡、Release Notes、Changelog 与官方工程更新；"
+                "媒体和社区信号须保留出处与可信度，不收录论文和学术会议。",
+                "",
+            ]
+        )
+
+        self._append_markdown_highlights(
+            lines,
+            sections.get("highlights", []),
+            "本日十条行业信号",
+        )
+        self._append_markdown_highlights(
+            lines, sections.get("changes", []), "相比昨天的新变化"
+        )
+        self._append_markdown_model_releases(
+            lines, sections.get("model_releases", [])
+        )
+        self._append_markdown_highlights(
+            lines, sections.get("product_updates", []), "产品、平台与 Agent 更新"
+        )
+        self._append_markdown_industry_chain(
+            lines, sections.get("industry_chain", {})
+        )
+        self._append_markdown_highlights(
+            lines, sections.get("application_trends", []), "应用层趋势与商业化"
+        )
+        self._append_markdown_highlights(
+            lines, sections.get("ai_funding", []), "AI 投融资与商业化"
+        )
+        self._append_markdown_cross_layer_connections(
+            lines, sections.get("cross_layer_connections", [])
+        )
+        self._append_markdown_official_social(
+            lines, sections.get("official_social_updates", [])
+        )
+        self._append_markdown_highlights(
+            lines, sections.get("watchlist", []), "持续观察"
+        )
+        lines.extend(
+            [
+                f"> 生成时间：{meta['generated_at']} · 候选事件：{meta['candidate_count']} 条",
+                "",
+                "## 编写说明",
+                "",
+                "- 每条保留原始链接，避免将媒体转述当作发布事实。",
+                "- “产业链联动”只表示共同主题，不代表公司间存在合作或因果关系。",
+            ]
+        )
+        return "\n".join(lines)
+
     def _format_markdown(self, data: Dict[str, Any]) -> str:
+        if self._is_industry_profile():
+            return self._format_industry_markdown(data)
         meta = data["metadata"]
         sections = data["sections"]
         lines = [f"# Rion 每日早报 · {meta['date']} {meta['weekday']}", ""]

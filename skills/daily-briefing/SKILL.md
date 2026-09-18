@@ -1,15 +1,29 @@
 ---
 name: daily-briefing
-description: Generate a source-linked Chinese AI/Web3 daily briefing with official model releases, infrastructure, application adoption, funding, and cross-industry signals directly in Codex, then save the editorial result as Markdown plus a standalone interactive HTML reader. Use when the user asks for 今日早报, AI 简报, 交互版简报, HTML 简报, 最新模型发布, AI 产品更新, 应用层趋势, AI 投融资, 产业链, official AI updates, daily briefing, recent AI hotspots, GitHub trends, content ideas, briefing feedback, or a weekly briefing review.
+description: Generate a source-linked Chinese AI industry daily briefing: collect up to 80 verified candidates, then let Codex editorially select up to 10 final items spanning models, products, infrastructure, adoption, and commercial events. Exclude academic-paper and Web3 coverage by default; save the result as Markdown for email delivery; generate a standalone HTML reader only when explicitly requested.
 ---
 
 # Daily Briefing
 
 Use this skill directly in Codex. Do not require Hermes, Telegram, or a separate chat bot.
 
+## Daily Selection Contract
+
+The Python program is a collection and verification layer, not the final editor. On every daily run:
+
+Completion requires the entire workflow in the same turn: collect up to 80 candidates, read and verify them, select up to 10, write the final Chinese Markdown, validate it, and prepare email delivery from that Markdown. Generate a standalone HTML companion only when explicitly requested. A collection success or candidate-file link is an intermediate result, never completion. If the current run already has a candidate packet, continue from it instead of collecting again. Only stop after collection when the user explicitly requests collection only.
+
+With `editorial.raw_candidates: true`, do not apply topical keyword exclusions or rule scores to the candidate pool. Read the original title and summary, then make editorial inclusion decisions. Record one inclusion/exclusion reason for each candidate in a companion selection log. When the user specifies choosing from an existing fixed candidate pool, keep final selections inside that pool; use external pages to verify those candidates. Broad X/watchlist discovery below applies to open-ended discovery runs, not this fixed-pool workflow. Preserve publication dates, reject future-dated entries, and check page publication dates rather than trusting sitemap modification times.
+
+1. Collect and deduplicate up to 80 industry candidates into `sections.editorial_queue`.
+2. Read each candidate's `raw_summary`, source, date, evidence level, and original URL.
+3. Independently select **up to 10** final items. Do not reproduce `sections.highlights` or sort solely by its scores.
+4. Prefer material releases, capability or availability changes, production deployment, adoption evidence, infrastructure economics, and major commercial events. Down-rank awards, marketing claims, routine minor releases, duplicate coverage, stale announcements, and generic case studies.
+5. If fewer than 10 recent, well-supported events remain, publish fewer items and state the shortfall. Never fill the list with stale or low-signal content.
+
 ## Generate Today's Briefing
 
-1. Run the bundled helper to fetch, normalize, deduplicate, and score the source pool:
+1. Run the bundled helper to fetch, normalize, and deduplicate the source pool:
 
 ```bash
 skills/daily-briefing/scripts/run-daily-briefing.sh \
@@ -31,7 +45,7 @@ Append the selected flags to the helper command before generating the editorial 
 
 When invoked from an installed skill, use the absolute path to this skill's `scripts/run-daily-briefing.sh`.
 
-2. Read `sections.industry_chain`, `sections.cross_layer_connections`, `sections.model_releases`, `sections.product_updates`, `sections.application_trends`, `sections.ai_funding`, `sections.viral_ai_news`, `sections.official_social_updates`, and `sections.editorial_queue`. Treat infrastructure, model/platform, product/function, application adoption, capital/commercial events, and potentially viral news as parallel intelligence tracks. Use the current Codex model to select the strongest items, write concrete Chinese explanations, organize sections, and produce varied X drafts. `raw_summary` contains source material for factual rewriting; do not discard it when the deterministic Chinese hint is generic.
+2. Read `sections.editorial_queue` first, then cross-check its entries against `sections.model_releases`, `sections.product_updates`, `sections.application_trends`, `sections.ai_funding`, and `sections.industry_chain`. Use the Daily Selection Contract above to choose the final ten. `raw_summary` contains source material for factual rewriting; do not discard it when the deterministic Chinese hint is generic.
 
 3. When `metadata.official_x_monitor.mode` is `codex_web_search`, execute every query in `sections.official_x_search_groups` for the requested window. The groups are country-aware and put China first. Retain direct `https://x.com/<handle>/status/<id>` links, and add only posts published by the configured account. Also check `sections.official_model_watchlist` and `sections.official_product_watchlist` for vendors and products that do not expose a stable feed.
 
@@ -39,7 +53,7 @@ When invoked from an installed skill, use the absolute path to this skill's `scr
 
 5. Before writing, complete a freshness audit: confirm that every relevant X and industry search group was checked or name the failed group, and separately record first-party findings as `model release`, `product/function update`, `application/adoption`, `funding/commercial event`, `ecosystem activity`, or `potential viral story`. An account or page appearing in a watchlist is not evidence that it was searched. Do not finalize a briefing with an empty China official-source result until the CN groups have been checked explicitly.
 
-6. Do not require a model launch for inclusion. Track major product releases, new features, application adoption, customer cases, user growth, pricing, revenue, partnerships, infrastructure, open-source projects, research breakthroughs, financing, policy or safety events, industry disputes, and fast-rising community discussions when they have clear AI relevance and credible links. Treat popularity as a distribution signal, not proof of truth.
+6. Do not require a model launch for inclusion. Track major product releases, new features, application adoption, customer cases, user growth, pricing, revenue, partnerships, infrastructure, open-source projects, financing, policy or safety events, and industry disputes when they have clear AI relevance and credible links. Do not include academic papers, conference research, pure benchmarks, Web3, or community heat as final items. Treat popularity as a distribution signal, not proof of truth.
 
 7. Classify each item on two separate axes: `industry_layer` is only `upstream`, `midstream`, or `downstream`; `event_types` describes what happened, such as `model_release`, `product_update`, `adoption`, `funding`, `acquisition`, `earnings`, or `policy`. Capital is a cross-cutting event, never a fourth industry layer. A downstream application company remains downstream after raising money.
 
@@ -52,7 +66,7 @@ python skills/daily-briefing/scripts/validate-briefing.py \
 
 When invoked from an installed skill, use the absolute path to `validate-briefing.py`. If validation fails, rewrite the named entries and run it again; do not silently return a partial draft.
 
-After validation passes, generate the companion interactive HTML by default:
+For the email-only workflow, stop after validating Markdown; the scheduled runner renders email HTML and plain text in memory and sends them. Do not generate a standalone HTML file. Only if the user explicitly requests a web reader, run:
 
 ```bash
 python skills/daily-briefing/scripts/render-briefing-html.py \
@@ -63,25 +77,19 @@ The renderer preserves the final Codex-edited Markdown and creates `outputs/brie
 
 9. Keep every factual claim within the candidate packet or the first-party pages/posts checked above. Preserve original URLs and numbers. Do not invent missing dates, scores, funding amounts, customer counts, revenue, benchmark results, or source agreement.
 
-10. Use clickable Markdown titles. Immediately below every retained news, model release, product update, funding event, official X post, and GitHub project, write a specific one- or two-sentence Chinese explanation before metadata or scores. It must identify who did what and include the most useful result, number, availability change, or impact supported by the source. A reader should understand the event without opening the link. Do not use generic filler such as `值得关注`, `可作为行业观察`, or `核心看点是工具链还不成熟` as the explanation. Do not add labels such as `中文总结`, `摘要`, or `一句话介绍` before explanations.
+10. Use clickable Markdown titles. Immediately below every retained news, model release, product update, funding event, official X post, and GitHub project, write a specific three- or four-sentence Chinese news summary before metadata. It must identify who did what and include the most useful result, number, availability change, or source-supported technical detail. Each sentence should add distinct information; use fewer sentences when the source lacks detail, without padding or inventing facts. For technical stories, add three or four factual sentences about architecture, interface, deployment, implementation changes, or benchmark setup when supported by the source. A reader should understand what happened without opening the link. The final Top 10 contains news summaries only: do not add `入选理由`, `为什么重要`, editorial judgments, or rebuttal-style endings such as `这不代表……`, `不能据此认为……`, or `仍需……`. Keep source confidence and uncertainty in the metadata line. Do not use generic filler such as `值得关注`, `可作为行业观察`, or `核心看点是工具链还不成熟` as the explanation. Do not add labels such as `中文总结`, `摘要`, or `一句话介绍` before explanations.
 
 11. Use these sections in order when relevant:
 
 ```text
+本日十条行业信号
 相比昨天的新变化
-AI 产业链全景
-产业链联动
 最新模型发布与更新
-产品与工具更新
-应用层趋势
-可能爆火的 AI 新闻
+产品、平台与 Agent 更新
+AI 产业链全景
+应用层趋势与商业化
 AI 投融资与商业化
-模型公司官方账号动态
-今日必须看
-适合发 X
-B端/商业机会
-持续跟踪
-X 草稿
+持续观察
 来源明细
 ```
 
@@ -100,7 +108,7 @@ Treat model launches and material model updates as a separate first-party intell
 1. Check `sections.model_releases` before general headlines on every run, including when the user only asks for an AI briefing. This section includes launches plus material version, capability, availability, pricing, deprecation, and open-weight updates.
 2. Confirm a launch with a vendor website, official RSS/sitemap, official changelog, official model card, or official GitHub Release. Media coverage may explain impact but cannot replace the release source.
 3. For each model release, preserve the original title, exact source URL, `published_at`, `release_kind`, and any concrete model ID supplied by the packet.
-4. Explain what changed, who can use it, how it is available (API, product, or open weights), and which important details remain unverified. Never infer pricing, benchmarks, context length, license, or availability.
+4. Explain what changed, who can use it, how it is available (API, product, or open weights), and the technical details explicitly disclosed by the source. Never infer pricing, benchmarks, context length, license, or availability; omit details the source does not provide.
 5. Keep release announcements separate from Hugging Face Trending and social heat. A trending model is a popularity signal unless it comes from a configured first-party organization.
 6. If no official model release appears in the requested time window, say so plainly instead of filling the section with rumors or older launches.
 
@@ -133,12 +141,12 @@ These options can be combined. Example: `--mode products --focus "医疗" --hour
 
 ## Deterministic Fallback
 
-If the Codex editorial pass cannot be completed, generate a complete linked Markdown file directly:
+If the Codex editorial pass cannot be completed, save only a clearly labeled pending candidate file and state the concrete blocker. Do not present the collection output as a completed briefing:
 
 ```bash
 skills/daily-briefing/scripts/run-daily-briefing.sh \
   --format markdown \
-  --output-file "outputs/briefing_$(date +%F).md"
+  --output-file "outputs/candidates_$(date +%F).md"
 ```
 
 ## Validate The Workflow

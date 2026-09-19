@@ -45,7 +45,7 @@ python -m pip install -r requirements.txt
 
 ## 2. 离线验证
 
-先跑 dry-run。它使用内置样例数据，不访问 TechCrunch、OpenAI、Google DeepMind、Hugging Face、CoinDesk 或 GitHub，适合检查环境是否可用。
+先跑 dry-run。它使用内置样例数据，不访问 TechCrunch、OpenAI、Google DeepMind、Hugging Face 或 GitHub，适合检查环境是否可用。
 
 ```bash
 python briefing.py --dry-run --no-save
@@ -60,7 +60,7 @@ python -m unittest discover -s tests
 python briefing.py
 ```
 
-默认会保存到 `outputs/briefing_YYYY-MM-DD.md`，质检通过后再生成 `outputs/briefing_YYYY-MM-DD.html`。Markdown 里的新闻标题和项目名都是可点击链接；HTML 提供搜索、目录、可信度与产业层筛选、本地收藏、主题切换和打印。候选池包含厂商官方模型发布源、算力与云基础设施、AI 应用、融资与商业信号、AI 编程/Agent 产品 Changelog、模型公司与产品 X 官方账号、媒体、官方 RSS/sitemap、Hacker News、arXiv、Hugging Face Trending、AI HOT 和指定 GitHub Releases。输出会给出上中下游产业链、跨层联动、最新模型发布、应用采用、投融资核验、官方账号动态、跨日变化、五维评分、商业机会和三种 X 草稿。
+默认会保存到 `outputs/briefing_YYYY-MM-DD.md`。Markdown 里的新闻标题和项目名都是可点击链接；邮件正文从最终 Markdown 在内存中渲染。候选池包含厂商官方模型发布源、算力与云基础设施、AI 应用、融资与商业信号、AI 编程/Agent 产品 Changelog、模型公司与产品 X 官方账号、媒体、官方 RSS/sitemap、Hacker News、Hugging Face Trending、AI HOT 和指定 GitHub Releases。最终 Top 10 由 Codex 根据产业重要性、时效、来源可信度、技术含量和来源多样性编辑选择，不使用个人画像分数。
 
 产业位置和事件类型必须分开：`industry_layer` 只允许上游、中游、下游；融资、并购、财报、产品更新和客户采用写入 `event_types`。资本不是第四层，融资后的应用公司仍然属于下游。
 

@@ -6,7 +6,7 @@
 
 面向课程汇报、组会和行业观察的 AI 工业界情报系统。默认只收集可核验的业界事件：模型与能力发布、产品和平台更新、AI 基础设施、产业采用及重大商业事件；覆盖国内外知名 AI 公司。每日生成带可点击出处的 Markdown/HTML，按周沉淀为可打印 PDF 的复盘。
 
-> **默认边界：不收 arXiv、论文、学术会议、纯 benchmark、Web3 或无来源的社区传闻。官方公告、模型卡、Release Notes、Changelog 与官方工程更新优先；媒体和社区只作发现或佐证。**
+> **默认边界：不收 arXiv、论文、学术会议、纯 benchmark、加密货币/区块链资讯或无来源的社区传闻。官方公告、模型卡、Release Notes、Changelog 与官方工程更新优先；媒体和社区只作发现或佐证。**
 
 ## 两种输出格式
 
@@ -80,17 +80,17 @@ Markdown 中的新闻标题和来源链接都可以直接点击。HTML 是不依
 - AI 编程/Agent：单独跟踪 Claude Code、Codex、Cursor、Copilot、Cognition/Devin、Replit、Manus
 - 多模态模型：单独跟踪 Runway、Stability AI、FLUX、Midjourney、Luma、Pika、Kling、Vidu
 - 补充信号：可选的 Hacker News、Hugging Face Trending、AI HOT 精选只用于发现，不会替代一手发布确认
-- 产业信号：自动抓取 NVIDIA、AWS、Google Cloud、Product Hunt、Crunchbase News、TechCrunch Venture、Data Center Dynamics，并把机器之心等无稳定 RSS 的入口交给 Codex 检索
+- 产业信号：自动抓取 NVIDIA、AMD、MLCommons、AWS、Google Cloud、Product Hunt、Crunchbase News、TechCrunch Venture、Data Center Dynamics，并把 CoreWeave、机器之心等无稳定 RSS 的入口交给 Codex 检索
 - 中国优先核验：补充 36Kr、IT桔子、港交所披露等检索入口，应用采用和融资数字必须回到一手来源确认
 - 官方追踪：Anthropic sitemap，以及 Codex、Claude Code、Gemini CLI、Transformers Releases
-- 学术与 Web3：默认配置禁用；如研究任务确有需要，可在 `config.yaml` 中显式开启
+- 非目标内容：学术论文、纯 benchmark、加密货币与区块链资讯不进入最终日报
 - GitHub 优质项目：GitHub Trending
 - 每日十条行业信号：优先展示模型、产品、基础设施和产业化的真正变化
 - Codex 友好：支持 `--dry-run` 离线验证、单元测试和稳定输出目录
 - 每条新闻/项目的可点击标题下都会紧跟 1 至 2 句具体中文概括，说明谁做了什么、关键结果或影响；不写空泛模板，也不额外加“摘要”等标签
 - Codex 保存早报后会运行 Markdown 质检器，自动拦截缺少中文概括、只有评分/来源或命中空泛模板的条目
 - 开头自动生成 `本日十条行业信号`，再按模型、产品/Agent、产业链、采用/商业化、资本事件和持续观察展开
-- 用内容价值、商业价值、个人匹配、时效、可信度五个维度排序，综合分最高 96，避免大量虚高满分
+- 最终 Top 10 由 Codex 根据产业重要性、时效、来源可信度、技术含量和来源多样性判断；不使用个人画像或旧版个性化分数
 - 可信度区分 `官方确认`、`多源印证`、`单源信号`
 - X 草稿覆盖单帖、thread、视觉/视频脚本三种形态
 - SQLite 记录首次出现、最后出现、重复次数、来源数和每日排名；同一天重复运行不会重复计数
@@ -206,11 +206,14 @@ python briefing.py --format html
 # 把 Codex 精编或手工修改后的 Markdown 转成交互 HTML
 python skills/daily-briefing/scripts/render-briefing-html.py outputs/briefing_YYYY-MM-DD.md
 
-# 每日工作流第 1 步：采集最多 80 条候选，不落盘
+# 手工预览采集最多 80 条候选，不落盘
 python briefing.py --editorial-packet --no-save
 
-# 每日工作流第 1 步：保存候选包，交由 Codex 编辑选择最终十条
+# 手工保存候选包
 python briefing.py --editorial-packet --output-file outputs/editorial_packet.json
+
+# 查看定时任务的缺失日期和恢复状态
+.venv/bin/python scripts/scheduled_briefing.py --check
 
 # 检查 Codex 精编后的每条链接是否紧跟具体中文概括
 python skills/daily-briefing/scripts/validate-briefing.py outputs/briefing_YYYY-MM-DD.md
@@ -265,7 +268,6 @@ sources:
       url: "https://deepmind.google/blog/rss.xml"
     - name: "Hugging Face"
       url: "https://huggingface.co/blog/feed.xml"
-  web3_news: "https://www.coindesk.com/"
   venture_news: "https://techcrunch.com/category/venture/"
   github_trending: "https://github.com/trending"
   hacker_news:
@@ -326,7 +328,6 @@ limits:
   application_trends: 6
   ai_funding: 6
   cross_layer_connections: 3
-  web3_news: 3
   venture_news: 5
   github_projects: 10
   topics: 5
@@ -369,7 +370,6 @@ B端/商业机会
 持续跟踪
 X 草稿
 AI 热点
-Web3 热点
 投资 & 经济
 GitHub 优质项目
 今日选题素材
@@ -432,7 +432,7 @@ MIT
 # 当前采集与编辑约定
 
 默认启用 `editorial.raw_candidates`：采集阶段不按 AI、行业或研究关键词删除内容。
-候选按来源轮流取近期条目，保留原始标题、摘要、链接及日期，最多 80 条；继续执行去重与日期检查。
-Python 输出为待编辑候选包，不自动生成规则 Top 10。
-由当前编辑 Agent 阅读全部候选、核验事实，按用户关注的 AI 工业界范围判断入选/不入选并记录理由，最终选择最多 10 条。
+候选按来源轮流取近期条目，保留原始标题、摘要、链接及日期，最多 80 条；继续执行去重与日期检查。定时任务将当天候选包永久保存在本机状态目录。
+Python 输出为待编辑候选包，不自动生成规则 Top 10。第一阶段由当前编辑 Agent 从候选中选出 30 条，仅记录入选 ID，不逐条撰写长理由。
+第二阶段只核验这 30 条，保存核验进度和草稿，最终选择最多 10 条；失败后可从已有阶段继续。
 这一步是编辑判断，不是多个独立模型投票；来源缺摘要时需要打开原文。

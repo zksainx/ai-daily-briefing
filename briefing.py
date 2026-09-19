@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 AI Daily Briefing Generator
-为 AI/Web3 自媒体创作者生成每日早报。
+生成 AI 工业界每日简报。
 
 默认会联网抓取数据；在 Codex、CI 或新机器上验证环境时，可以用
 `--dry-run` 走内置样例数据，不依赖外部网站。
@@ -52,9 +52,33 @@ DEFAULT_CONFIG: Dict[str, Any] = {
                 "url": "https://huggingface.co/blog/feed.xml",
             },
         ],
-        "web3_news": "https://www.coindesk.com/",
         "venture_news": "https://techcrunch.com/category/venture/",
         "industry_feeds": [
+            {
+                "name": "NVIDIA Newsroom",
+                "url": "https://nvidianews.nvidia.com/rss.xml",
+                "track": "infrastructure",
+                "country": "US",
+                "layer_hint": "upstream",
+                "authority": "official",
+            },
+            {
+                "name": "AMD Press Releases",
+                "url": "https://ir.amd.com/news-events/press-releases/rss",
+                "track": "infrastructure",
+                "country": "US",
+                "layer_hint": "upstream",
+                "authority": "official",
+            },
+            {
+                "name": "MLCommons",
+                "url": "https://mlcommons.org/feed/",
+                "track": "infrastructure",
+                "country": "GLOBAL",
+                "layer_hint": "upstream",
+                "authority": "official",
+                "role": "industry_benchmark",
+            },
             {
                 "name": "NVIDIA Blog",
                 "url": "https://blogs.nvidia.com/feed/",
@@ -130,8 +154,8 @@ DEFAULT_CONFIG: Dict[str, Any] = {
             },
         ],
         "industry_watchlist": [
-            {"name": "AMD Newsroom", "track": "infrastructure", "country": "US", "url": "https://www.amd.com/en/newsroom.html"},
             {"name": "TSMC News", "track": "infrastructure", "country": "TW", "url": "https://pr.tsmc.com/english/news"},
+            {"name": "CoreWeave Newsroom", "track": "infrastructure", "country": "US", "url": "https://coreweave.com/newsroom"},
             {"name": "AWS What's New", "track": "infrastructure", "country": "US", "url": "https://aws.amazon.com/new/"},
             {"name": "Azure Updates", "track": "infrastructure", "country": "US", "url": "https://azure.microsoft.com/en-us/updates/"},
             {"name": "机器之心", "track": "applications", "country": "CN", "url": "https://www.jiqizhixin.com/"},
@@ -230,27 +254,35 @@ DEFAULT_CONFIG: Dict[str, Any] = {
             {"name": "Together AI", "author": "togethercomputer"},
         ],
         "official_model_pages": [
+            {"name": "OpenAI API Changelog", "country": "US", "url": "https://developers.openai.com/api/docs/changelog"},
             {"name": "OpenAI Model Release Notes", "country": "US", "url": "https://help.openai.com/en/articles/9624314-model-release-notes"},
             {"name": "Anthropic News", "country": "US", "url": "https://www.anthropic.com/news"},
+            {"name": "Claude Platform Release Notes", "country": "US", "url": "https://platform.claude.com/docs/en/release-notes/overview"},
             {"name": "Gemini API Release Notes", "country": "US", "url": "https://ai.google.dev/gemini-api/docs/changelog"},
+            {"name": "Meta AI Blog", "country": "US", "url": "https://ai.meta.com/blog/"},
             {"name": "xAI News", "country": "US", "url": "https://x.ai/news"},
             {"name": "Microsoft Foundry Models", "country": "US", "url": "https://learn.microsoft.com/en-us/azure/foundry/foundry-models/concepts/models-from-partners"},
             {"name": "NVIDIA Models", "country": "US", "url": "https://build.nvidia.com/models"},
             {"name": "Qwen Blog", "country": "CN", "url": "https://qwen.ai/blog"},
+            {"name": "Alibaba Model Studio Release Notes", "country": "CN", "url": "https://help.aliyun.com/zh/model-studio/model-release-notes"},
+            {"name": "Volcano Ark Announcements", "country": "CN", "url": "https://www.volcengine.com/docs/82379/66619f8df281250274ef4f88"},
             {"name": "DeepSeek API Updates", "country": "CN", "url": "https://api-docs.deepseek.com/updates/"},
             {"name": "Z.ai New Releases", "country": "CN", "url": "https://docs.bigmodel.cn/cn/update/new-releases"},
             {"name": "Kimi What's New", "country": "CN", "url": "https://www.kimi.com/code/docs/kimi-code/whats-new.html"},
             {"name": "MiniMax Model Releases", "country": "CN", "url": "https://platform.minimaxi.com/docs/release-notes/models"},
             {"name": "MiniMax Research", "country": "CN", "url": "https://www.minimaxi.com/news"},
             {"name": "Tencent Hunyuan", "country": "CN", "url": "https://hunyuan.tencent.com/"},
+            {"name": "Tencent Hunyuan Product Updates", "country": "CN", "url": "https://cloud.tencent.com/document/product/1729/97765"},
             {"name": "ByteDance Seed Blog", "country": "CN", "url": "https://seed.bytedance.com/en/blog"},
             {"name": "StepFun", "country": "CN", "url": "https://www.stepfun.com/"},
             {"name": "Baidu ERNIE", "country": "CN", "url": "https://wenxin.baidu.com/"},
+            {"name": "Baidu Qianfan Updates", "country": "CN", "url": "https://cloud.baidu.com/doc/qianfan/s/Mmh8l4qwj"},
             {"name": "Huawei Pangu", "country": "CN", "url": "https://www.huaweicloud.com/intl/en-us/product/pangu.html"},
             {"name": "iFLYTEK Spark", "country": "CN", "url": "https://xinghuo.xfyun.cn/"},
             {"name": "SenseTime News", "country": "CN", "url": "https://www.sensetime.com/cn/news"},
         ],
         "official_product_pages": [
+            {"name": "Microsoft Foundry What's New", "country": "US", "category": "model/platform", "url": "https://learn.microsoft.com/en-us/azure/ai-foundry/whats-new-foundry"},
             {"name": "Claude Code Changelog", "country": "US", "category": "AI coding", "url": "https://code.claude.com/docs/en/changelog"},
             {"name": "Cursor Changelog", "country": "US", "category": "AI coding", "url": "https://cursor.com/changelog"},
             {"name": "Grok Release Notes", "country": "US", "category": "model/product", "url": "https://docs.x.ai/developers/release-notes"},
@@ -390,7 +422,6 @@ DEFAULT_CONFIG: Dict[str, Any] = {
     "limits": {
         "ai_news": 10,
         "ai_official_per_source": 3,
-        "web3_news": 3,
         "venture_news": 5,
         "github_projects": 10,
         "topics": 5,
@@ -442,180 +473,6 @@ DEFAULT_CONFIG: Dict[str, Any] = {
         "enabled": True,
         "database": "data/briefing_history.sqlite3",
     },
-    "personalization": {
-        "enabled": True,
-        "baseline": 36,
-        "section_boosts": {
-            "ai": 6,
-            "web3": 5,
-            "venture": 5,
-            "github": 8,
-        },
-        "signals": [
-            {
-                "label": "Agent / AI 编码",
-                "weight": 28,
-                "keywords": [
-                    "agent",
-                    "agents",
-                    "agentic",
-                    "codex",
-                    "claude code",
-                    "mcp",
-                    "devtools",
-                    "swe-bench",
-                    "智能体",
-                    "多智能体",
-                ],
-                "reason": "贴合你正在用的 Codex、Claude Code 和 Agent 工作流，适合做工具测评或效率流内容。",
-            },
-            {
-                "label": "B 端 AI 工作流",
-                "weight": 24,
-                "keywords": [
-                    "automation",
-                    "workflow",
-                    "enterprise",
-                    "deployment",
-                    "productivity",
-                    "office",
-                    "meeting",
-                    "transcription",
-                    "support",
-                    "sales",
-                    "saas",
-                    "b2b",
-                    "自动化",
-                    "工作流",
-                    "办公",
-                    "企业",
-                ],
-                "reason": "能连接到 B 端服务、企业提效或工作流改造，适合发展成案例、咨询或产品 demo。",
-            },
-            {
-                "label": "模型竞争格局",
-                "weight": 18,
-                "keywords": [
-                    "openai",
-                    "anthropic",
-                    "claude",
-                    "google",
-                    "gemini",
-                    "deepmind",
-                    "mistral",
-                    "meta",
-                    "llama",
-                    "microsoft",
-                    "copilot",
-                    "xai",
-                    "grok",
-                    "qwen",
-                    "deepseek",
-                ],
-                "reason": "适合判断模型公司格局、生态路线和未来内容叙事，不只盯单个产品更新。",
-            },
-            {
-                "label": "AI 自媒体信息差",
-                "weight": 20,
-                "keywords": [
-                    "browser",
-                    "search",
-                    "platform",
-                    "creator",
-                    "social",
-                    "prompt",
-                    "system prompt",
-                    "system_prompts",
-                    "glossary",
-                    "open source",
-                    "github",
-                    "vibe-coded",
-                    "浏览器",
-                    "搜索",
-                    "提示词",
-                    "开源",
-                ],
-                "reason": "适合拆成 X 选题、工具清单、观点单帖或信息差内容。",
-            },
-            {
-                "label": "AI 视频/图像/多模态",
-                "weight": 20,
-                "keywords": [
-                    "video",
-                    "image",
-                    "vision",
-                    "multimodal",
-                    "sora",
-                    "runway",
-                    "midjourney",
-                    "stable diffusion",
-                    "视频",
-                    "图像",
-                    "多模态",
-                ],
-                "reason": "贴近你的 AI 视频和 AI 图像能力，适合做视觉内容、工具测评或多平台素材。",
-            },
-            {
-                "label": "Web3 信息差",
-                "weight": 22,
-                "keywords": [
-                    "web3",
-                    "crypto",
-                    "bitcoin",
-                    "btc",
-                    "xrp",
-                    "solana",
-                    "blockchain",
-                    "on-chain",
-                    "prediction market",
-                    "regulation",
-                    "tokenized",
-                    "etf",
-                    "rwa",
-                    "链上",
-                    "监管",
-                ],
-                "reason": "适合做 Web3 信息差、监管变化、市场情绪或链上基础设施解读。",
-            },
-            {
-                "label": "商业化/资本信号",
-                "weight": 18,
-                "keywords": [
-                    "funding",
-                    "fund",
-                    "venture",
-                    "vc",
-                    "ipo",
-                    "acquisition",
-                    "revenue",
-                    "valuation",
-                    "spending",
-                    "capital",
-                    "融资",
-                    "资本",
-                    "上市",
-                ],
-                "reason": "能辅助判断 AI 商业化、融资风向和潜在变现赛道。",
-            },
-            {
-                "label": "学习/知识库",
-                "weight": 12,
-                "keywords": [
-                    "paper",
-                    "research",
-                    "benchmark",
-                    "course",
-                    "book",
-                    "learning",
-                    "study",
-                    "论文",
-                    "研究",
-                    "教程",
-                ],
-                "reason": "适合沉淀到知识库，后续可以转成科普、课程或学习路线内容。",
-            },
-        ],
-    },
 }
 
 SAMPLE_DATA: Dict[str, List[Dict[str, str]]] = {
@@ -634,16 +491,6 @@ SAMPLE_DATA: Dict[str, List[Dict[str, str]]] = {
             "source": "Sample",
             "summary": "端侧推理能力继续提升，硬件、应用和本地 AI 会一起受益。",
         },
-    ],
-    "web3_news": [
-        {
-            "title": "主流交易平台上线新的链上资产分析功能",
-            "url": "https://example.com/web3-analytics",
-            "time": "示例数据",
-            "source": "Sample",
-            "sentiment": "Neutral",
-            "summary": "链上数据工具正在变成交易基础设施，安全和透明度会更受关注。",
-        }
     ],
     "venture_news": [
         {
@@ -703,14 +550,6 @@ SAMPLE_DATA: Dict[str, List[Dict[str, str]]] = {
             "stars": "12,345",
             "today_stars": "321 stars today",
             "url": "https://github.com/sample/agent-workflow",
-        },
-        {
-            "name": "sample/web3-indexer",
-            "description": "Simple Web3 data indexer for builders.",
-            "language": "TypeScript",
-            "stars": "8,888",
-            "today_stars": "188 stars today",
-            "url": "https://github.com/sample/web3-indexer",
         },
     ],
     "ecosystem_signals": [
@@ -990,7 +829,7 @@ class DailyBriefing:
             return True
         if not self._is_industry_profile():
             return True
-        if section == "web3" or self._is_academic_item(item):
+        if self._is_academic_item(item):
             return False
         source = clean_text(item.get("source", "")).lower()
         if not self._editorial_flag("include_discovery_sources", True) and any(
@@ -1007,7 +846,7 @@ class DailyBriefing:
         ).lower()
         if has_any_keyword(
             text,
-            ("web3", "crypto", "bitcoin", "blockchain", "solana", "链上", "加密货币"),
+            ("crypto", "bitcoin", "blockchain", "solana", "链上", "加密货币"),
         ):
             return False
         if (
@@ -1114,7 +953,7 @@ class DailyBriefing:
             if not self._looks_like_ai_funding(item):
                 return False
         elif self.briefing_mode == "industry":
-            if item.get("section") == "web3" or not self._is_ai_relevant(item):
+            if not self._is_ai_relevant(item):
                 return False
         elif self.briefing_mode == "hotspots":
             if item.get("section") not in {"ai", "github", "venture"}:
@@ -1770,19 +1609,6 @@ class DailyBriefing:
                 "robot",
                 "deepfake",
             ),
-            "web3": (
-                "web3",
-                "crypto",
-                "bitcoin",
-                "ethereum",
-                "blockchain",
-                "token",
-                "defi",
-                "aave",
-                "solana",
-                "xrp",
-                "on-chain",
-            ),
             "venture": (
                 "funding",
                 "raises",
@@ -1799,8 +1625,6 @@ class DailyBriefing:
         }
         score = sum(2 for keyword in keywords.get(section, ()) if keyword_in_text(text, keyword))
         source = clean_text(item.get("source", "")).lower()
-        if section == "web3" and "coindesk" in source:
-            score += 3
         if section == "ai" and any(
             name.lower() in source for name in self._official_ai_source_names()
         ):
@@ -1810,13 +1634,11 @@ class DailyBriefing:
     def _dedupe_news_sections(
         self,
         ai_news: List[Dict[str, str]],
-        web3_news: List[Dict[str, str]],
         venture_news: List[Dict[str, str]],
     ) -> Dict[str, List[Dict[str, str]]]:
         entries: List[Dict[str, Any]] = []
         for section, rows in (
             ("ai", ai_news),
-            ("web3", web3_news),
             ("venture", venture_news),
         ):
             for row in rows:
@@ -1847,7 +1669,6 @@ class DailyBriefing:
 
         result: Dict[str, List[Dict[str, str]]] = {
             "ai": [],
-            "web3": [],
             "venture": [],
         }
         for entry in entries:
@@ -2893,73 +2714,6 @@ class DailyBriefing:
         rows = self._round_robin(groups, sum(len(group) for group in groups))
         return self._dedupe_items(rows)[:limit]
 
-    def fetch_web3_news(self, limit: Optional[int] = None) -> List[Dict[str, str]]:
-        """抓取 Web3 热点新闻。"""
-        if self._is_industry_profile() and not self._editorial_flag(
-            "include_web3", False
-        ):
-            return []
-        limit = limit or self._limit("web3_news")
-        self._log("正在抓取 Web3 热点...")
-        if self.dry_run:
-            return self._sample("web3_news", limit)
-
-        url = self.config["sources"]["web3_news"]
-        started_at = monotonic()
-        try:
-            soup = self._get_soup(url)
-            articles = self._collect_coindesk_articles(soup, url, limit)
-            for article in articles:
-                article.setdefault("sentiment", "Neutral")
-            self._log(f"获取到 {len(articles)} 条 Web3 新闻")
-            self._record_source_health("CoinDesk", started_at, len(articles))
-            return articles
-        except Exception as exc:
-            self._log(f"抓取 Web3 新闻失败: {exc}")
-            self._record_source_health("CoinDesk", started_at, 0, str(exc))
-            return []
-
-    def _collect_coindesk_articles(
-        self,
-        soup: BeautifulSoup,
-        base_url: str,
-        limit: int,
-    ) -> List[Dict[str, str]]:
-        article_path = re.compile(
-            r"/(business|markets|policy|tech|daybook-us)/\d{4}/\d{2}/\d{2}/"
-        )
-        blocked_fragments = ("/press-release/", "/sponsored-content/")
-        candidates: Dict[str, Dict[str, str]] = {}
-        order: List[str] = []
-
-        for link in soup.select("a[href]"):
-            href = link.get("href", "")
-            if any(fragment in href for fragment in blocked_fragments):
-                continue
-            if not article_path.search(href):
-                continue
-
-            title = clean_text(link.get_text(" ", strip=True))
-            if len(title) < 20:
-                continue
-
-            full_url = urljoin(base_url, href)
-            item = {
-                "title": title,
-                "url": full_url,
-                "time": "N/A",
-                "source": "CoinDesk",
-                "summary": "",
-            }
-
-            if full_url not in candidates:
-                order.append(full_url)
-                candidates[full_url] = item
-            elif len(title) < len(candidates[full_url]["title"]):
-                candidates[full_url] = item
-
-        return [candidates[url] for url in order][:limit]
-
     def fetch_venture_news(self, limit: Optional[int] = None) -> List[Dict[str, str]]:
         """抓取投资和融资新闻。"""
         if self._is_industry_profile() and not self._editorial_flag(
@@ -3056,11 +2810,10 @@ class DailyBriefing:
     def generate_topics(
         self,
         ai_news: List[Dict[str, str]],
-        web3_news: List[Dict[str, str]],
         venture_news: List[Dict[str, str]],
         github_projects: List[Dict[str, str]],
     ) -> List[str]:
-        """生成适合中文 AI/Web3 自媒体的选题素材。"""
+        """生成适合中文 AI 行业内容的选题素材。"""
         topics: List[str] = []
 
         if ai_news:
@@ -3070,10 +2823,6 @@ class DailyBriefing:
         if github_projects:
             topics.append(
                 f"「开源项目观察」{github_projects[0]['name']} 为什么今天值得看"
-            )
-        if web3_news:
-            topics.append(
-                f"「Web3 情绪温度计」从 {short_title(web3_news[0]['title'], 24)} 看市场叙事"
             )
         if venture_news:
             topics.append(
@@ -3087,7 +2836,7 @@ class DailyBriefing:
         ):
             topics.extend(
                 [
-                    "「今日 AI/Web3 信息差」把新闻整理成 3 个普通人能用的机会",
+                    "「今日 AI 信息差」把新闻整理成 3 个普通人能用的机会",
                     "「工具测评选题」从 GitHub Trending 挑一个项目做上手体验",
                     "「商业化观察」今天哪些热点能转成商单、咨询或产品 demo",
                 ]
@@ -3097,14 +2846,11 @@ class DailyBriefing:
     def enrich_items(
         self,
         ai_news: List[Dict[str, str]],
-        web3_news: List[Dict[str, str]],
         venture_news: List[Dict[str, str]],
         github_projects: List[Dict[str, str]],
     ) -> None:
         for item in ai_news:
             self._enrich_news_item(item, "ai")
-        for item in web3_news:
-            self._enrich_news_item(item, "web3")
         for item in venture_news:
             self._enrich_news_item(item, "venture")
         for item in github_projects:
@@ -3117,7 +2863,6 @@ class DailyBriefing:
         item["tags"] = self._tag_item(item, section)
         self._assign_industry_layer(item, section)
         item["score"] = self._score_item(item, section)
-        self._apply_personalization(item, section)
         self._apply_dimension_scores(item, section)
         item["item_key"] = canonical_url(item.get("url", "")) or (
             f"{section}:{item_title(item).lower()}"
@@ -3130,7 +2875,6 @@ class DailyBriefing:
         project["tags"] = self._tag_item(project, "github")
         self._assign_industry_layer(project, "github")
         project["score"] = self._score_item(project, "github")
-        self._apply_personalization(project, "github")
         self._apply_dimension_scores(project, "github")
         project["item_key"] = canonical_url(project.get("url", "")) or (
             f"github:{item_title(project).lower()}"
@@ -3143,13 +2887,6 @@ class DailyBriefing:
 
         if item.get("signal_type") == "model_release":
             return "最新模型发布"
-
-        if section == "web3":
-            if has_any_keyword(text, ("regulation", "rules", "eu", "uk", "mica", "treasury", "sanction")):
-                return "政策监管"
-            if has_any_keyword(text, ("bitcoin", "btc", "xrp", "ether", "solana", "token", "market")):
-                return "市场动态"
-            return "Web3 叙事"
 
         if section == "venture":
             event_types = set(item.get("event_types", []))
@@ -3184,7 +2921,6 @@ class DailyBriefing:
             (("meeting", "transcription", "whisper", "ollama", "会议", "转写"), "办公自动化"),
             (("prompt", "system prompt", "system_prompts", "提示词"), "技巧与观点"),
             (("book", "course", "learning", "machine learning", "学习", "教程"), "学习资源"),
-            (("web3", "crypto", "blockchain", "on-chain", "chain", "indexer", "链上"), "Web3 工具"),
         ]
         for keywords, category in rules:
             if has_any_keyword(text, keywords):
@@ -3492,7 +3228,6 @@ class DailyBriefing:
             ("办公效率", ("office", "productivity", "meeting", "transcription", "办公", "会议")),
             ("融资/IPO", ("fund", "funding", "ipo", "venture", "unicorn", "vc", "融资", "资本")),
             ("监管", ("regulation", "regulatory", "mica", "treasury", "sanction", "compliance", "监管")),
-            ("Web3", ("web3", "crypto", "bitcoin", "btc", "xrp", "solana", "blockchain", "on-chain", "链上")),
             ("RWA", ("tokenized", "blackrock", "etf", "stock")),
         ]
         tags = ["模型发布"] if item.get("signal_type") == "model_release" else []
@@ -3516,8 +3251,6 @@ class DailyBriefing:
             label = event_tags.get(event_type)
             if label and label not in tags:
                 tags.append(label)
-        if section == "web3" and "Web3" not in tags:
-            tags.insert(0, "Web3")
         if section == "github" and "开源生态" not in tags:
             tags.insert(0, "开源生态")
         if not tags:
@@ -3530,7 +3263,6 @@ class DailyBriefing:
         score += {
             "ai": 8,
             "github": 10,
-            "web3": 6,
             "venture": 5,
         }.get(section, 0)
         high_signal = [
@@ -3552,12 +3284,8 @@ class DailyBriefing:
             "qwen",
             "deepseek",
             "grok",
-            "web3",
-            "bitcoin",
-            "xrp",
             "智能体",
             "多智能体",
-            "链上",
             "融资",
             "芯片",
         ]
@@ -3578,60 +3306,6 @@ class DailyBriefing:
                 elif stars_today >= 100:
                     score += 5
         return min(score, 100)
-
-    def _apply_personalization(self, item: Dict[str, Any], section: str) -> None:
-        personalization = self.config.get("personalization", {})
-        if not personalization.get("enabled", True):
-            item["personal_relevance"] = min(int(item.get("score", 0)), 94)
-            item["rion_score"] = item["personal_relevance"]
-            item["rion_reason"] = "按通用热度排序。"
-            item["content_value"] = self._content_value_label(int(item["rion_score"]))
-            item["matched_signals"] = []
-            return
-
-        text = " ".join(
-            [
-                item_title(item),
-                clean_text(item.get("summary", "")),
-                clean_text(item.get("description", "")),
-                clean_text(item.get("category", "")),
-                " ".join(item.get("tags", [])),
-            ]
-        ).lower()
-        baseline = int(personalization.get("baseline", 36))
-        section_boosts = personalization.get("section_boosts", {})
-        score = baseline + int(section_boosts.get(section, 0))
-        score += int(item.get("score", 0)) // 6
-
-        matched: List[Dict[str, Any]] = []
-        for signal in personalization.get("signals", []):
-            keywords = signal.get("keywords", [])
-            if has_any_keyword(text, keywords):
-                weight = int(signal.get("weight", 0))
-                matched.append(
-                    {
-                        "label": signal.get("label", "相关信号"),
-                        "weight": weight,
-                        "reason": signal.get("reason", ""),
-                    }
-                )
-
-        matched.sort(key=lambda row: int(row.get("weight", 0)), reverse=True)
-        signal_bonus = 0
-        for index, signal in enumerate(matched[:3]):
-            weight = int(signal.get("weight", 0))
-            if index == 0:
-                signal_bonus += min(weight, 20)
-            elif index == 1:
-                signal_bonus += min(weight // 2, 9)
-            else:
-                signal_bonus += min(weight // 3, 5)
-        score += min(signal_bonus, 34)
-        item["personal_relevance"] = min(score, 96)
-        item["rion_score"] = item["personal_relevance"]
-        item["matched_signals"] = [row["label"] for row in matched[:3]]
-        item["rion_reason"] = self._personalization_reason(matched, section)
-        item["content_value"] = self._content_value_label(int(item["rion_score"]))
 
     def _source_profile(self, item: Dict[str, Any]) -> Dict[str, Any]:
         source = clean_text(item.get("source", ""))
@@ -3680,7 +3354,7 @@ class DailyBriefing:
                 credibility = 66
             elif "hugging face trending" in lowered:
                 credibility = 76
-            elif any(name in lowered for name in ("techcrunch", "coindesk")):
+            elif "techcrunch" in lowered:
                 credibility = 78
             else:
                 credibility = 70
@@ -3700,7 +3374,6 @@ class DailyBriefing:
         families = (
             ("techcrunch", "techcrunch"),
             ("crunchbase", "crunchbase"),
-            ("coindesk", "coindesk"),
             ("hacker news", "hacker news"),
             ("hugging face", "hugging face"),
             ("google deepmind", "google deepmind"),
@@ -3801,36 +3474,15 @@ class DailyBriefing:
         item["content_score"] = min(content_score, 96)
         item["business_score"] = self._business_score(item, section)
         item["timeliness_score"] = self._timeliness_score(item)
-        personal = int(item.get("personal_relevance", item.get("rion_score", 0)))
         credibility = int(item.get("credibility_score", 0))
         overall = round(
-            item["content_score"] * 0.26
-            + item["business_score"] * 0.16
-            + personal * 0.28
-            + item["timeliness_score"] * 0.15
-            + credibility * 0.15
+            item["content_score"] * 0.35
+            + item["business_score"] * 0.20
+            + item["timeliness_score"] * 0.20
+            + credibility * 0.25
         )
         item["overall_score"] = min(overall, 96)
-        item["rion_score"] = item["overall_score"]
         item["content_value"] = self._content_value_label(item["overall_score"])
-
-    def _personalization_reason(
-        self,
-        matched: List[Dict[str, Any]],
-        section: str,
-    ) -> str:
-        if matched:
-            reason = clean_text(matched[0].get("reason", ""))
-            if reason:
-                return reason
-
-        fallback = {
-            "ai": "可作为 AI 行业观察素材，优先看是否能转成 X 观点或工具测评。",
-            "web3": "可作为 Web3 市场或监管观察素材，适合判断是否存在信息差。",
-            "venture": "可作为商业化和资本风向素材，重点看是否能连接 B 端机会。",
-            "github": "可作为开源工具观察素材，重点看是否值得上手测评或做工作流 demo。",
-        }
-        return fallback.get(section, "可作为今日 AI/Web3 内容素材继续跟进。")
 
     def _content_value_label(self, score: int) -> str:
         if score >= 88:
@@ -3844,14 +3496,12 @@ class DailyBriefing:
     def all_content_items(
         self,
         ai_news: List[Dict[str, str]],
-        web3_news: List[Dict[str, str]],
         venture_news: List[Dict[str, str]],
         github_projects: List[Dict[str, str]],
     ) -> List[Dict[str, Any]]:
         items: List[Dict[str, Any]] = []
         source_sections = [
             ("ai", "AI 热点", ai_news),
-            ("web3", "Web3 热点", web3_news),
             ("venture", "投资 & 经济", venture_news),
             ("github", "GitHub 优质项目", github_projects),
         ]
@@ -3874,7 +3524,7 @@ class DailyBriefing:
         return sorted(
             items,
             key=lambda item: (
-                int(item.get("overall_score", item.get("rion_score", 0))),
+                int(item.get("overall_score", 0)),
                 int(item.get("credibility_score", 0)),
                 int(item.get("timeliness_score", 0)),
                 int(item.get("score", 0)),
@@ -3897,20 +3547,16 @@ class DailyBriefing:
                 item.get("summary", "") or item.get("description", "")
             ),
             "score": item.get("score", 0),
-            "overall_score": item.get("overall_score", item.get("rion_score", 0)),
-            "rion_score": item.get("rion_score", item.get("score", 0)),
+            "overall_score": item.get("overall_score", 0),
             "content_score": item.get("content_score", 0),
             "business_score": item.get("business_score", 0),
-            "personal_relevance": item.get("personal_relevance", 0),
             "timeliness_score": item.get("timeliness_score", 0),
             "credibility_score": item.get("credibility_score", 0),
             "source_count": item.get("source_count", 1),
             "source_tier": item.get("source_tier", "单一来源"),
             "verification": item.get("verification", "单源信号"),
             "evidence_status": item.get("evidence_status", "待核验"),
-            "rion_reason": item.get("rion_reason", ""),
             "content_value": item.get("content_value", ""),
-            "matched_signals": item.get("matched_signals", []),
             "base_overall_score": item.get(
                 "base_overall_score", item.get("overall_score", 0)
             ),
@@ -3962,7 +3608,6 @@ class DailyBriefing:
         section_counts: Dict[str, int] = {}
         section_caps = {
             "ai": min(3, limit),
-            "web3": min(2, limit),
             "venture": min(2, limit),
             "github": min(2, limit),
         }
@@ -3983,7 +3628,7 @@ class DailyBriefing:
             section_counts[section] = section_counts.get(section, 0) + 1
             return True
 
-        for section in ("ai", "web3", "venture"):
+        for section in ("ai", "venture"):
             top_item = next((item for item in ranked if item.get("section") == section), None)
             if top_item:
                 add_item(top_item)
@@ -4183,8 +3828,7 @@ class DailyBriefing:
         updates = [
             item
             for item in items
-            if item.get("section") != "web3"
-            and self._looks_like_product_update(item)
+            if self._looks_like_product_update(item)
         ]
         updates = self._ranked_items(updates)
         return [self._briefing_entry(item) for item in updates[:limit]]
@@ -4230,7 +3874,6 @@ class DailyBriefing:
                 item
                 for item in items
                 if item.get("industry_layer") == layer
-                and item.get("section") != "web3"
                 and self._is_ai_relevant(item)
             ]
             layers[layer] = [
@@ -4248,7 +3891,6 @@ class DailyBriefing:
             item
             for item in items
             if item.get("industry_layer") == "downstream"
-            and item.get("section") != "web3"
             and self._is_ai_relevant(item)
             and (
                 item.get("industry_track") == "applications"
@@ -4359,7 +4001,6 @@ class DailyBriefing:
                     item
                     for item in items
                     if item.get("industry_layer") == layer
-                    and item.get("section") != "web3"
                 ]
             )[:8]
             for layer in ("upstream", "midstream", "downstream")
@@ -4481,7 +4122,7 @@ class DailyBriefing:
             if model_count >= model_limit:
                 break
 
-        for section in ("ai", "web3", "venture", "github"):
+        for section in ("ai", "venture", "github"):
             top = next((item for item in ranked if item.get("section") == section), None)
             if top is not None:
                 add_item(top)
@@ -4516,7 +4157,6 @@ class DailyBriefing:
         section_counts: Dict[str, int] = {}
         section_caps = {
             "ai": min(3, limit),
-            "web3": min(2, limit),
             "venture": min(2, limit),
             "github": min(2, limit),
         }
@@ -4543,13 +4183,10 @@ class DailyBriefing:
                     "url": item.get("url", ""),
                     "category": category,
                     "tags": " / ".join(tags),
-                    "rion_score": str(item.get("rion_score", item.get("score", 0))),
-                    "rion_reason": item.get("rion_reason", ""),
                     "content_value": item.get("content_value", ""),
                     "overall_score": str(item.get("overall_score", 0)),
                     "content_score": str(item.get("content_score", 0)),
                     "business_score": str(item.get("business_score", 0)),
-                    "personal_relevance": str(item.get("personal_relevance", 0)),
                     "timeliness_score": str(item.get("timeliness_score", 0)),
                     "credibility_score": str(item.get("credibility_score", 0)),
                     "verification": item.get("verification", "单源信号"),
@@ -4559,7 +4196,7 @@ class DailyBriefing:
             section_counts[section] = section_counts.get(section, 0) + 1
             return True
 
-        for section in ("ai", "web3", "venture"):
+        for section in ("ai", "venture"):
             top_item = next((item for item in ranked if item.get("section") == section), None)
             if top_item:
                 add_topic(top_item)
@@ -4599,8 +4236,6 @@ class DailyBriefing:
                 "url": item.get("url", ""),
                 "category": item.get("category", ""),
                 "tags": " / ".join(item.get("tags", [])),
-                "rion_score": str(item.get("rion_score", item.get("score", 0))),
-                "rion_reason": item.get("rion_reason", ""),
                 "content_value": item.get("content_value", ""),
             }
             draft = self._make_x_draft(item, topic)
@@ -4608,7 +4243,7 @@ class DailyBriefing:
             seen_keys.add(dedupe_key)
             return True
 
-        for section in ("ai", "web3", "github", "venture"):
+        for section in ("ai", "github", "venture"):
             top_item = next((item for item in ranked if item.get("section") == section), None)
             if top_item:
                 add_draft(top_item)
@@ -4649,13 +4284,10 @@ class DailyBriefing:
             "url": topic.get("url", ""),
             "category": topic.get("category", ""),
             "tags": topic.get("tags", ""),
-            "rion_score": topic.get("rion_score", ""),
-            "rion_reason": topic.get("rion_reason", ""),
             "content_value": topic.get("content_value", ""),
             "overall_score": item.get("overall_score", 0),
             "content_score": item.get("content_score", 0),
             "business_score": item.get("business_score", 0),
-            "personal_relevance": item.get("personal_relevance", 0),
             "timeliness_score": item.get("timeliness_score", 0),
             "credibility_score": item.get("credibility_score", 0),
             "verification": item.get("verification", "单源信号"),
@@ -4667,7 +4299,7 @@ class DailyBriefing:
         summary: str,
         tags: List[str],
     ) -> str:
-        visual = "模型页面或产品演示" if "Web3" not in tags else "价格、监管或链上数据截图"
+        visual = "模型页面或产品演示"
         return (
             f"开场画面：{short_title(title, 34)}\n\n"
             f"旁白：{summary}\n\n"
@@ -4683,14 +4315,6 @@ class DailyBriefing:
         category: str,
     ) -> str:
         short = short_title(title, 34)
-        if "Web3" in tags:
-            return (
-                f"今天这条 Web3 动态值得注意：{short}\n\n"
-                f"{summary}\n\n"
-                "我会重点看两件事：\n"
-                "1. 这是不是短期市场情绪变化\n"
-                "2. 这背后有没有普通人容易忽略的监管/链上信息差"
-            )
         if "融资/IPO" in tags or category in {"融资并购", "资本市场", "商业化"}:
             return (
                 f"AI 商业化现在越来越像一道筛选题：{short}\n\n"
@@ -4723,13 +4347,6 @@ class DailyBriefing:
         category: str,
     ) -> str:
         short = short_title(title, 34)
-        if "Web3" in tags:
-            return (
-                f"1/ 这条 Web3 动态值得拆一下：{short}\n\n"
-                f"2/ {summary}\n\n"
-                "3/ 我会把它放在三个维度看：监管、市场情绪、链上数据。\n\n"
-                "4/ 真正的信息差通常不在标题里，而在它会改变哪些人的行为：交易者、机构、项目方，还是普通用户。"
-            )
         if "AI 编码" in tags or "Agent" in tags or category == "Agent / AI 编码":
             return (
                 f"1/ AI Agent 的下一波机会，可能藏在这个信号里：{short}\n\n"
@@ -4756,9 +4373,7 @@ class DailyBriefing:
         if "Mistral" in tags:
             return f"别只盯着 OpenAI，{short_title(title, 22)} 这类模型公司也在改写牌桌"
         if "监管" in tags:
-            return f"监管开始下场后，{short_title(title, 22)} 这类 Web3 叙事要重新估值"
-        if "Web3" in tags:
-            return f"Web3 的下一条信息差，可能藏在「{short_title(title, 22)}」里"
+            return f"监管开始下场后，{short_title(title, 22)} 这类 AI 业务要重新评估"
         if "浏览器" in tags:
             return f"浏览器不只是搜索入口了，{short_title(title, 22)} 说明入口战争变了"
         if "融资/IPO" in tags:
@@ -4767,7 +4382,7 @@ class DailyBriefing:
             return f"AI 安全不是远方问题，{short_title(title, 22)} 已经把风险摆到台面上"
         if category == "学习资源":
             return f"这份资料值得收藏：{short_title(title, 28)}"
-        return f"今天这条 AI/Web3 动态值得看：{short_title(title, 28)}"
+        return f"今天这条 AI 动态值得看：{short_title(title, 28)}"
 
     def _make_x_angle(self, item: Dict[str, Any]) -> str:
         tags = item.get("tags", [])
@@ -4780,8 +4395,6 @@ class DailyBriefing:
             return "从开发者效率、任务分发和真实工作流落地切入，别只讲模型参数。"
         if "Mistral" in tags:
             return "从模型公司差异化、开源生态和欧洲 AI 叙事切入，适合做 OpenAI 之外的格局解读。"
-        if "Web3" in tags:
-            return "从监管、市场情绪和普通用户风险切入，适合做信息差解读。"
         if "融资/IPO" in tags:
             return "从资本为什么买单切入，顺手连接 B 端 AI 服务和商业化机会。"
         if "办公效率" in tags:
@@ -4793,7 +4406,7 @@ class DailyBriefing:
     def _format_hint(self, item: Dict[str, Any]) -> str:
         tags = item.get("tags", [])
         category = item.get("category", "")
-        if "AI 编码" in tags or "Agent" in tags or "Web3" in tags or category == "Agent / AI 编码":
+        if "AI 编码" in tags or "Agent" in tags or category == "Agent / AI 编码":
             return "thread"
         if "融资/IPO" in tags or "监管" in tags:
             return "单帖 + 数据截图"
@@ -4802,14 +4415,11 @@ class DailyBriefing:
     def add_chinese_summaries(
         self,
         ai_news: List[Dict[str, str]],
-        web3_news: List[Dict[str, str]],
         venture_news: List[Dict[str, str]],
         github_projects: List[Dict[str, str]],
     ) -> None:
         for item in ai_news:
             item["summary_cn"] = self._summarize_news_cn(item, "ai")
-        for item in web3_news:
-            item["summary_cn"] = self._summarize_news_cn(item, "web3")
         for item in venture_news:
             item["summary_cn"] = self._summarize_news_cn(item, "venture")
         for item in github_projects:
@@ -4847,16 +4457,6 @@ class DailyBriefing:
                 (("game", "gaming", "date", "vibe-coded", "openclaw"), "AI 应用进入娱乐、社交和生活场景，可以做成产品体验或争议性选题。"),
             ]
             fallback = f"这条围绕「{short_title(title, 24)}」展开，可作为 AI 行业动态或工具趋势素材。"
-        elif section == "web3":
-            rules = [
-                (("prediction market", "prediction markets"), "预测市场进入监管视野，Web3 的高增长叙事开始面对合规约束。"),
-                (("rule", "rules", "regulation", "regulatory", "eu", "uk", "mica"), "加密监管规则继续细化，机构入场和散户参与门槛可能被重新划分。"),
-                (("xrp", "bitcoin", "btc", "ether", "solana", "token"), "主流资产价格和链上指标出现变化，反映市场风险偏好正在调整。"),
-                (("sanction", "treasury", "isis", "compliance"), "链上地址被纳入制裁和执法场景，合规能力正成为加密基础设施的硬门槛。"),
-                (("mining", "hashrate", "miner"), "矿池或算力侧出现变化，会影响比特币网络供给侧和矿工格局。"),
-                (("tokenized", "blackrock", "etf", "stock"), "RWA 和代币化证券继续推进，传统金融资产上链的路径更清晰了。"),
-            ]
-            fallback = f"这条围绕「{short_title(title, 24)}」展开，可作为 Web3 市场、监管或叙事观察。"
         else:
             rules = [
                 (("fund", "fund ii", "backs", "stake", "stakes", "vc", "venture", "capital"), "创投资金仍在寻找确定性增长标的，资本偏好正在向更可验证的赛道集中。"),
@@ -4883,7 +4483,6 @@ class DailyBriefing:
             (("book", "course", "learning", "machine learning"), "机器学习或工程学习资料，适合收藏成系统化学习素材。"),
             (("prompt", "prompts", "system prompt", "system prompts", "system_prompt", "system_prompts"), "系统提示词和模型行为资料库，适合做 prompt engineering 研究。"),
             (("terminal", "multiplexer", "cli"), "终端里的 agent 调度工具，适合做效率流和开发环境升级选题。"),
-            (("web3", "crypto", "blockchain", "on-chain", "chain", "indexer"), "Web3 数据或链上基础设施项目，适合观察开发者工具机会。"),
             (("codex", "claude", "agent", "agents", "mcp"), "Coding agent 相关项目，重点是多 agent 协作、审代码或任务分发。"),
         ]
 
@@ -4939,7 +4538,6 @@ class DailyBriefing:
             self.fetch_ai_news,
             self.fetch_ecosystem_signals,
             self.fetch_industry_signals,
-            self.fetch_web3_news,
             self.fetch_venture_news,
             self.fetch_github_trending,
         ]
@@ -4948,7 +4546,6 @@ class DailyBriefing:
                 base_ai_news,
                 ecosystem_signals,
                 industry_signals,
-                web3_news,
                 base_venture_news,
                 github_projects,
             ) = list(executor.map(lambda fetch: fetch(), fetchers))
@@ -4978,13 +4575,11 @@ class DailyBriefing:
         )
         news_sections = self._dedupe_news_sections(
             ai_news,
-            web3_news,
             venture_news,
         )
         ai_news = news_sections["ai"]
-        web3_news = news_sections["web3"]
         venture_news = news_sections["venture"]
-        self.enrich_items(ai_news, web3_news, venture_news, github_projects)
+        self.enrich_items(ai_news, venture_news, github_projects)
         if self._is_industry_profile():
             ai_news = [
                 item for item in ai_news if self._keep_industry_item(item, "ai")
@@ -4999,21 +4594,13 @@ class DailyBriefing:
                 for item in github_projects
                 if self._keep_industry_item(item, "github")
             ]
-        raw_items = ai_news + web3_news + venture_news + github_projects
-        if self.history_store is not None:
-            self.history_store.apply_feedback(raw_items)
-            for item in raw_items:
-                item["content_value"] = self._content_value_label(
-                    int(item.get("overall_score", 0))
-                )
-        else:
-            for item in raw_items:
-                item["base_overall_score"] = item.get("overall_score", 0)
-                item["feedback_score"] = 0
-                item["feedback_reason"] = ""
+        raw_items = ai_news + venture_news + github_projects
+        for item in raw_items:
+            item["base_overall_score"] = item.get("overall_score", 0)
+            item["feedback_score"] = 0
+            item["feedback_reason"] = ""
         candidate_items = self.all_content_items(
             ai_news,
-            web3_news,
             venture_news,
             github_projects,
         )
@@ -5059,14 +4646,13 @@ class DailyBriefing:
                 return filtered
 
             ai_news = filter_rows(ai_news, "ai", "AI 热点")
-            web3_news = filter_rows(web3_news, "web3", "Web3 热点")
             venture_news = filter_rows(venture_news, "venture", "投资 & 经济")
             github_projects = filter_rows(
                 github_projects, "github", "GitHub 优质项目"
             )
 
         ai_news = self._select_ai_candidates(ai_news, self._limit("ai_news"))
-        all_items = self.all_content_items(ai_news, web3_news, venture_news, github_projects)
+        all_items = self.all_content_items(ai_news, venture_news, github_projects)
         history_by_key = {
             item.get("item_key", ""): item
             for item in ranked_candidates
@@ -5127,7 +4713,6 @@ class DailyBriefing:
             x_drafts = self.generate_x_drafts(all_items)
             topics = self.generate_topics(
                 general_ai_news,
-                web3_news,
                 venture_news,
                 github_projects,
             )
@@ -5241,7 +4826,6 @@ class DailyBriefing:
                 "x_topics": x_topics,
                 "x_drafts": x_drafts,
                 "ai_news": general_ai_news,
-                "web3_news": web3_news,
                 "venture_news": venture_news,
                 "github_projects": github_projects,
                 "topics": topics,
@@ -5309,7 +4893,7 @@ class DailyBriefing:
         if self._is_industry_profile():
             lines.extend(
                 [
-                    "> 本报告从每日已核验的 AI 行业事件中提取持续信号；不纳入论文、学术会议或 Web3 信息。",
+                    "> 本报告从每日已核验的 AI 行业事件中提取持续信号；不纳入论文、学术会议或加密货币信息。",
                     "",
                 ]
             )
@@ -5408,10 +4992,9 @@ class DailyBriefing:
 
     def _dimension_meta(self, item: Dict[str, Any]) -> str:
         labels = (
-            ("综合", "overall_score", "rion_score"),
+            ("综合", "overall_score", None),
             ("内容", "content_score", None),
             ("商业", "business_score", None),
-            ("匹配", "personal_relevance", None),
             ("时效", "timeliness_score", None),
             ("可信", "credibility_score", None),
         )
@@ -5500,7 +5083,6 @@ class DailyBriefing:
             if item.get("signal_type") != "model_release"
         ]
         self._append_news_section(lines, "AI 热点", general_ai_news)
-        self._append_news_section(lines, "Web3 热点", sections["web3_news"])
         self._append_news_section(lines, "投资 & 经济", sections["venture_news"])
         self._append_project_section(lines, sections["github_projects"])
         self._append_topic_section(lines, sections["topics"])
@@ -5691,7 +5273,6 @@ class DailyBriefing:
             if item.get("signal_type") != "model_release"
         ]
         self._append_markdown_news(lines, "AI 热点", general_ai_news)
-        self._append_markdown_news(lines, "Web3 热点", sections["web3_news"])
         self._append_markdown_news(lines, "投资 & 经济", sections["venture_news"])
 
         lines.extend(["## GitHub 优质项目", ""])
@@ -5714,8 +5295,6 @@ class DailyBriefing:
                     meta_parts.append(score_meta)
                 if meta_parts:
                     lines.append(f"   {' · '.join(meta_parts)}")
-                if project.get("rion_reason"):
-                    lines.append(f"   {project['rion_reason']}")
                 if project.get("description"):
                     lines.append(f"   {project['description']}")
         else:
@@ -6038,8 +5617,6 @@ class DailyBriefing:
                 lines.append(f"   {commercial_details}")
             if item.get("requires_primary_confirmation"):
                 lines.append("   关键融资或商业数字仍需公司、投资方或监管披露确认。")
-            if item.get("rion_reason"):
-                lines.append(f"   {item['rion_reason']}")
             if item.get("feedback_reason"):
                 lines.append(f"   {item['feedback_reason']}")
         lines.append("")
@@ -6061,8 +5638,6 @@ class DailyBriefing:
             if score_line:
                 lines.append(f"   {score_line}")
             lines.append(f"   角度：{topic.get('angle', '')}")
-            if topic.get("rion_reason"):
-                lines.append(f"   {topic['rion_reason']}")
             lines.append(f"   形式：{topic.get('format', '')} · 来源：{source_text}")
             if topic.get("tags"):
                 lines.append(f"   标签：{topic['tags']}")
@@ -6089,8 +5664,6 @@ class DailyBriefing:
                 meta_parts.append(score_meta)
             if meta_parts:
                 lines.append(f"{' · '.join(meta_parts)}  ")
-            if draft.get("rion_reason"):
-                lines.append(f"{draft['rion_reason']}  ")
             if source_text:
                 lines.append(f"来源：{source_text}")
             lines.extend(["", "```text", draft.get("body", ""), "```", ""])
@@ -6145,8 +5718,6 @@ class DailyBriefing:
                 lines.append(commercial_details)
             if item.get("requires_primary_confirmation"):
                 lines.append("关键融资或商业数字仍需公司、投资方或监管披露确认。")
-            if item.get("rion_reason"):
-                lines.append(item["rion_reason"])
             if item.get("feedback_reason"):
                 lines.append(item["feedback_reason"])
             if item.get("summary"):
@@ -6169,8 +5740,6 @@ class DailyBriefing:
             if score_line:
                 lines.append(score_line)
             lines.append(f"角度：{topic.get('angle', '')}")
-            if topic.get("rion_reason"):
-                lines.append(topic["rion_reason"])
             lines.append(f"形式：{topic.get('format', '')}")
             if topic.get("source"):
                 lines.append(f"来源：{topic['source']}")
@@ -6196,8 +5765,6 @@ class DailyBriefing:
                 meta_parts.append(score_meta)
             if meta_parts:
                 lines.append(" · ".join(meta_parts))
-            if draft.get("rion_reason"):
-                lines.append(draft["rion_reason"])
             if draft.get("source"):
                 lines.append(f"来源：{draft['source']}")
             if draft.get("url"):
@@ -6235,8 +5802,6 @@ class DailyBriefing:
                 meta_parts.append(score_meta)
             if meta_parts:
                 lines.append(" · ".join(meta_parts))
-            if item.get("rion_reason"):
-                lines.append(item["rion_reason"])
             if item.get("summary_cn"):
                 lines.append(item["summary_cn"])
             if item.get("url"):
@@ -6267,8 +5832,6 @@ class DailyBriefing:
                 meta_parts.append(score_meta)
             if meta_parts:
                 lines.append(" · ".join(meta_parts))
-            if project.get("rion_reason"):
-                lines.append(project["rion_reason"])
             if project.get("description"):
                 lines.append(project["description"])
             if project.get("summary_cn"):
@@ -6319,8 +5882,6 @@ class DailyBriefing:
                 meta_parts.append(score_meta)
             if meta_parts:
                 lines.append(f"   {' · '.join(meta_parts)}")
-            if item.get("rion_reason"):
-                lines.append(f"   {item['rion_reason']}")
         lines.append("")
 
 
@@ -6347,7 +5908,7 @@ def save_output(
 
 
 def parse_args(argv: Optional[List[str]] = None) -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Generate Rion's daily AI/Web3 briefing.")
+    parser = argparse.ArgumentParser(description="Generate a daily AI industry briefing.")
     parser.add_argument("--config", default="config.yaml", help="配置文件路径")
     parser.add_argument(
         "--format",

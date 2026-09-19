@@ -17,8 +17,8 @@ class CodexSkillTests(unittest.TestCase):
         )
 
         self.assertTrue(skill.startswith("---\nname: daily-briefing\n"))
-        self.assertIn("Generate a source-linked Chinese AI/Web3", skill)
-        self.assertIn("Immediately below every retained news", skill)
+        self.assertIn("Generate a source-linked Chinese AI industry", skill)
+        self.assertIn("Do not use a personal profile", skill)
         self.assertIn("every linked item is immediately followed", metadata)
         self.assertIn("$daily-briefing", metadata)
 
@@ -50,13 +50,8 @@ class CodexSkillTests(unittest.TestCase):
         )
 
         self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertIn("# Rion 每日早报", result.stdout)
-        self.assertIn("## 今日必须看", result.stdout)
-        self.assertIn("## 产品与工具更新", result.stdout)
-        self.assertIn("## AI 产业链全景", result.stdout)
-        self.assertIn("## 应用层趋势", result.stdout)
-        self.assertIn("## AI 投融资与商业化", result.stdout)
-        self.assertIn("## 可能爆火的 AI 新闻", result.stdout)
+        self.assertIn("# 原始候选采集", result.stdout)
+        self.assertIn("等待编辑逐条判断并选择 Top 10", result.stdout)
         self.assertIn("](", result.stdout)
 
     def test_runner_supports_targeted_briefings(self):
@@ -82,8 +77,8 @@ class CodexSkillTests(unittest.TestCase):
         )
 
         self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertIn("方向：`Agent`", result.stdout)
-        self.assertIn("时间：过去 `48` 小时", result.stdout)
+        self.assertIn("# 原始候选采集", result.stdout)
+        self.assertIn("AI agent", result.stdout)
 
     def test_runner_supports_industry_briefing(self):
         runner = SKILL_DIR / "scripts" / "run-daily-briefing.sh"
@@ -104,10 +99,8 @@ class CodexSkillTests(unittest.TestCase):
         )
 
         self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertIn("## AI 产业链全景", result.stdout)
-        self.assertIn("## 产业链联动", result.stdout)
-        self.assertIn("## 应用层趋势", result.stdout)
-        self.assertIn("## AI 投融资与商业化", result.stdout)
+        self.assertIn("# 原始候选采集", result.stdout)
+        self.assertIn("AI workflow startup", result.stdout)
 
     def test_markdown_to_html_renderer_is_portable(self):
         renderer = SKILL_DIR / "scripts" / "render-briefing-html.py"

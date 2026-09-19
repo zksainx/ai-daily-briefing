@@ -40,7 +40,7 @@ python -m unittest discover -s tests
 python briefing.py
 ```
 
-默认保存为带可点击链接的 Markdown。Codex 精编并质检通过后，会再生成同名交互 HTML。开头会有 `相比昨天的新变化`、`今日必须看`、`适合发 X`、`B端/商业机会`、`持续跟踪` 和三种形态的 `X 草稿`。每条都有五维评分、可信度标记和简短中文解释：
+默认保存为带可点击链接的 Markdown。Codex 精编并质检通过后，由邮件任务直接渲染正文。最终 Top 10 由 Codex 根据产业重要性、时效、来源可信度、技术含量和来源多样性判断，不使用个人画像分数：
 
 ```text
 outputs/briefing_YYYY-MM-DD.md
@@ -130,7 +130,6 @@ output:
 
 limits:
   ai_news: 10
-  web3_news: 3
   venture_news: 5
   github_projects: 10
   topics: 5

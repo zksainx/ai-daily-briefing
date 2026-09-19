@@ -1,6 +1,6 @@
 # AGENTS.md - Codex Runbook
 
-这个仓库的目标很简单：让 Rion 可以在 Codex、Claude Code、Hermes 或本地 Python 里生成每日 AI/Web3 简报。
+这个仓库的目标很简单：让用户可以在 Codex、Claude Code、Hermes 或本地 Python 里生成每日 AI 工业界简报。
 
 ## 默认工作方式
 

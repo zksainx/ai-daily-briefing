@@ -163,7 +163,7 @@ class BriefingStore:
 
                 seen_count = int(stored["seen_count"])
                 score_delta = (
-                    int(item.get("overall_score", item.get("rion_score", 0)))
+                    int(item.get("overall_score", 0))
                     - int(previous["score"])
                     if previous is not None
                     else 0
@@ -199,7 +199,7 @@ class BriefingStore:
                 item_key = str(item.get("item_key", ""))
                 if not item_key:
                     continue
-                score = int(item.get("overall_score", item.get("rion_score", 0)))
+                score = int(item.get("overall_score", 0))
                 source_count = int(item.get("source_count", 1))
                 is_selected = 1 if item_key in selected else 0
                 existing = connection.execute(
@@ -404,7 +404,7 @@ class BriefingStore:
             for key, values in category_scores.items()
         }
         for item in items:
-            base_score = int(item.get("overall_score", item.get("rion_score", 0)))
+            base_score = int(item.get("overall_score", 0))
             exact = max(-8, min(8, item_scores.get(str(item.get("item_key", "")), 0)))
             source = source_adjustments.get(str(item.get("source", "")), 0)
             category = category_adjustments.get(str(item.get("category", "")), 0)
@@ -412,7 +412,6 @@ class BriefingStore:
             item["base_overall_score"] = base_score
             item["feedback_score"] = adjustment
             item["overall_score"] = max(0, min(96, base_score + adjustment))
-            item["rion_score"] = item["overall_score"]
             reasons = []
             if exact:
                 reasons.append("你对这条内容有过反馈")

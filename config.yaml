@@ -4,7 +4,6 @@ editorial:
   profile: "ai_industry"
   title: "AI 工业界前沿简报"
   include_academic: false
-  include_web3: false
   include_discovery_sources: false
   include_media_sources: true
   include_community_sources: false
@@ -18,7 +17,7 @@ editorial:
     - "产业化：可核验的客户采用、定价、合作、融资、并购和财报"
   exclusions:
     - "arXiv、论文、学术会议、纯 benchmark 和纯理论研究"
-    - "Web3、加密货币和与 AI 无直接关系的融资新闻"
+    - "加密货币、区块链和与 AI 无直接关系的融资新闻"
     - "未被一手来源或多源报道证实的社区传闻"
 
 # 数据源配置
@@ -31,10 +30,12 @@ sources:
       url: "https://deepmind.google/blog/rss.xml"
     - name: "Hugging Face"
       url: "https://huggingface.co/blog/feed.xml"
-  web3_news: "https://www.coindesk.com/"
   venture_news: "https://techcrunch.com/category/venture/"
   # 产业链独立信号源。official 可直接确认自身公告；media/community 只做发现。
   industry_feeds:
+    - {name: "NVIDIA Newsroom", url: "https://nvidianews.nvidia.com/rss.xml", track: "infrastructure", country: "US", layer_hint: "upstream", authority: "official"}
+    - {name: "AMD Press Releases", url: "https://ir.amd.com/news-events/press-releases/rss", track: "infrastructure", country: "US", layer_hint: "upstream", authority: "official"}
+    - {name: "MLCommons", url: "https://mlcommons.org/feed/", track: "infrastructure", country: "GLOBAL", layer_hint: "upstream", authority: "official", role: "industry_benchmark"}
     - {name: "NVIDIA Generative AI Blog", url: "https://developer.nvidia.com/blog/category/generative-ai/feed/", track: "infrastructure", country: "US", layer_hint: "upstream", authority: "official"}
     - {name: "AWS Machine Learning Blog", url: "https://aws.amazon.com/blogs/machine-learning/feed/", track: "infrastructure", country: "US", layer_hint: "upstream", authority: "official"}
     - {name: "Google Cloud AI", url: "https://cloudblog.withgoogle.com/products/ai-machine-learning/rss/", track: "infrastructure", country: "US", layer_hint: "midstream", authority: "official"}
@@ -63,8 +64,8 @@ sources:
     - {name: "Data Center Dynamics", url: "https://www.datacenterdynamics.com/en/rss/", track: "infrastructure", country: "GLOBAL", layer_hint: "upstream", authority: "media", discovery_only: true}
   # 无稳定免费接口的数据源进入 Codex 核验包，不伪装成已自动抓取。
   industry_watchlist:
-    - {name: "AMD Newsroom", track: "infrastructure", country: "US", url: "https://www.amd.com/en/newsroom.html"}
     - {name: "TSMC News", track: "infrastructure", country: "TW", url: "https://pr.tsmc.com/english/news"}
+    - {name: "CoreWeave Newsroom", track: "infrastructure", country: "US", url: "https://coreweave.com/newsroom"}
     - {name: "AWS What's New", track: "infrastructure", country: "US", url: "https://aws.amazon.com/new/"}
     - {name: "Azure Updates", track: "infrastructure", country: "US", url: "https://azure.microsoft.com/en-us/updates/"}
     - {name: "机器之心", track: "applications", country: "CN", url: "https://www.jiqizhixin.com/"}
@@ -162,27 +163,35 @@ sources:
     - {name: "Together AI", author: "togethercomputer"}
   # 没有稳定 RSS/API 的发布页会进入 Codex 精编包，由 Codex 做网页核验。
   official_model_pages:
+    - {name: "OpenAI API Changelog", country: "US", url: "https://developers.openai.com/api/docs/changelog"}
     - {name: "OpenAI Model Release Notes", country: "US", url: "https://help.openai.com/en/articles/9624314-model-release-notes"}
     - {name: "Anthropic News", country: "US", url: "https://www.anthropic.com/news"}
+    - {name: "Claude Platform Release Notes", country: "US", url: "https://platform.claude.com/docs/en/release-notes/overview"}
     - {name: "Gemini API Release Notes", country: "US", url: "https://ai.google.dev/gemini-api/docs/changelog"}
+    - {name: "Meta AI Blog", country: "US", url: "https://ai.meta.com/blog/"}
     - {name: "xAI News", country: "US", url: "https://x.ai/news"}
     - {name: "Microsoft Foundry Models", country: "US", url: "https://learn.microsoft.com/en-us/azure/foundry/foundry-models/concepts/models-from-partners"}
     - {name: "NVIDIA Models", country: "US", url: "https://build.nvidia.com/models"}
     - {name: "Qwen Blog", country: "CN", url: "https://qwen.ai/blog"}
+    - {name: "Alibaba Model Studio Release Notes", country: "CN", url: "https://help.aliyun.com/zh/model-studio/model-release-notes"}
+    - {name: "Volcano Ark Announcements", country: "CN", url: "https://www.volcengine.com/docs/82379/66619f8df281250274ef4f88"}
     - {name: "DeepSeek API Updates", country: "CN", url: "https://api-docs.deepseek.com/updates/"}
     - {name: "Z.ai New Releases", country: "CN", url: "https://docs.bigmodel.cn/cn/update/new-releases"}
     - {name: "Kimi What's New", country: "CN", url: "https://www.kimi.com/code/docs/kimi-code/whats-new.html"}
     - {name: "MiniMax Model Releases", country: "CN", url: "https://platform.minimaxi.com/docs/release-notes/models"}
     - {name: "MiniMax Research", country: "CN", url: "https://www.minimaxi.com/news"}
     - {name: "Tencent Hunyuan", country: "CN", url: "https://hunyuan.tencent.com/"}
+    - {name: "Tencent Hunyuan Product Updates", country: "CN", url: "https://cloud.tencent.com/document/product/1729/97765"}
     - {name: "ByteDance Seed Blog", country: "CN", url: "https://seed.bytedance.com/en/blog"}
     - {name: "StepFun", country: "CN", url: "https://www.stepfun.com/"}
     - {name: "Baidu ERNIE", country: "CN", url: "https://wenxin.baidu.com/"}
+    - {name: "Baidu Qianfan Updates", country: "CN", url: "https://cloud.baidu.com/doc/qianfan/s/Mmh8l4qwj"}
     - {name: "Huawei Pangu", country: "CN", url: "https://www.huaweicloud.com/intl/en-us/product/pangu.html"}
     - {name: "iFLYTEK Spark", country: "CN", url: "https://xinghuo.xfyun.cn/"}
     - {name: "SenseTime News", country: "CN", url: "https://www.sensetime.com/cn/news"}
   # AI 编程、Agent 与多模态产品的官方更新页。
   official_product_pages:
+    - {name: "Microsoft Foundry What's New", country: "US", category: "model/platform", url: "https://learn.microsoft.com/en-us/azure/ai-foundry/whats-new-foundry"}
     - {name: "Claude Code Changelog", country: "US", category: "AI coding", url: "https://code.claude.com/docs/en/changelog"}
     - {name: "Cursor Changelog", country: "US", category: "AI coding", url: "https://cursor.com/changelog"}
     - {name: "Grok Release Notes", country: "US", category: "model/product", url: "https://docs.x.ai/developers/release-notes"}
@@ -315,7 +324,6 @@ output:
 limits:
   ai_news: 10
   ai_official_per_source: 3
-  web3_news: 0
   venture_news: 3
   github_projects: 4
   topics: 0
@@ -367,46 +375,3 @@ quality:
 history:
   enabled: true
   database: "data/briefing_history.sqlite3"
-
-# Rion 个性化排序。它会进入五维评分中的「个人匹配」，不是唯一排序依据。
-personalization:
-  enabled: false
-  baseline: 36
-  section_boosts:
-    ai: 6
-    web3: 5
-    venture: 5
-    github: 8
-  signals:
-    - label: "Agent / AI 编码"
-      weight: 28
-      keywords: ["agent", "agents", "agentic", "codex", "claude code", "mcp", "devtools", "swe-bench", "智能体", "多智能体"]
-      reason: "贴合你正在用的 Codex、Claude Code 和 Agent 工作流，适合做工具测评或效率流内容。"
-    - label: "B 端 AI 工作流"
-      weight: 24
-      keywords: ["automation", "workflow", "enterprise", "deployment", "productivity", "office", "meeting", "transcription", "support", "sales", "saas", "b2b", "自动化", "工作流", "办公", "企业"]
-      reason: "能连接到 B 端服务、企业提效或工作流改造，适合发展成案例、咨询或产品 demo。"
-    - label: "模型竞争格局"
-      weight: 18
-      keywords: ["openai", "anthropic", "claude", "google", "gemini", "deepmind", "mistral", "meta", "llama", "microsoft", "copilot", "xai", "grok", "qwen", "deepseek"]
-      reason: "适合判断模型公司格局、生态路线和未来内容叙事，不只盯单个产品更新。"
-    - label: "AI 自媒体信息差"
-      weight: 20
-      keywords: ["browser", "search", "platform", "creator", "social", "prompt", "system prompt", "system_prompts", "glossary", "open source", "github", "vibe-coded", "浏览器", "搜索", "提示词", "开源"]
-      reason: "适合拆成 X 选题、工具清单、观点单帖或信息差内容。"
-    - label: "AI 视频/图像/多模态"
-      weight: 20
-      keywords: ["video", "image", "vision", "multimodal", "sora", "runway", "midjourney", "stable diffusion", "视频", "图像", "多模态"]
-      reason: "贴近你的 AI 视频和 AI 图像能力，适合做视觉内容、工具测评或多平台素材。"
-    - label: "Web3 信息差"
-      weight: 22
-      keywords: ["web3", "crypto", "bitcoin", "btc", "xrp", "solana", "blockchain", "on-chain", "prediction market", "regulation", "tokenized", "etf", "rwa", "链上", "监管"]
-      reason: "适合做 Web3 信息差、监管变化、市场情绪或链上基础设施解读。"
-    - label: "商业化/资本信号"
-      weight: 18
-      keywords: ["funding", "fund", "venture", "vc", "ipo", "acquisition", "revenue", "valuation", "spending", "capital", "融资", "资本", "上市"]
-      reason: "能辅助判断 AI 商业化、融资风向和潜在变现赛道。"
-    - label: "学习/知识库"
-      weight: 12
-      keywords: ["paper", "research", "benchmark", "course", "book", "learning", "study", "论文", "研究", "教程"]
-      reason: "适合沉淀到知识库，后续可以转成科普、课程或学习路线内容。"

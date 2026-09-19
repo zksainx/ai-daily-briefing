@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+from dataclasses import replace
 from datetime import datetime
 import os
 from pathlib import Path
@@ -39,6 +40,16 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--preview", help="Write the email HTML without sending")
     parser.add_argument("--send", action="store_true", help="Actually send email")
     parser.add_argument("--force", action="store_true", help="Ignore the delivery ledger")
+    parser.add_argument(
+        "--delivery-revision",
+        default="",
+        help="Optional revision ID with its own idempotent delivery ledger entries",
+    )
+    parser.add_argument(
+        "--subject-prefix",
+        default="",
+        help="Optional prefix added to the rendered email subject",
+    )
     return parser.parse_args()
 
 
@@ -49,6 +60,8 @@ def main() -> int:
     load_env_file(env_path)
     reply_to = os.environ.get("BRIEFING_EMAIL_REPLY_TO", "")
     briefing = render_email(markdown_path.read_text(encoding="utf-8"), reply_to=reply_to)
+    if args.subject_prefix:
+        briefing = replace(briefing, subject=args.subject_prefix + briefing.subject)
 
     if args.preview:
         preview_path = Path(args.preview).expanduser().resolve()
@@ -75,16 +88,21 @@ def main() -> int:
         already_sent = {
             recipient.lower()
             for recipient in recipients
-            if delivery_key(briefing.report_date, recipient) in state
+            if delivery_key(
+                briefing.report_date, recipient, args.delivery_revision
+            ) in state
         }
     settings = smtp_settings_from_env()
     sent_at = datetime.now(ZoneInfo("Asia/Shanghai")).isoformat(timespec="seconds")
 
     def record_delivery(recipient: str) -> None:
-        state[delivery_key(briefing.report_date, recipient)] = {
+        state[
+            delivery_key(briefing.report_date, recipient, args.delivery_revision)
+        ] = {
             "date": briefing.report_date,
             "recipient": recipient,
             "sent_at": sent_at,
+            "revision": args.delivery_revision,
         }
         write_delivery_state(state_path, state)
 

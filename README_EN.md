@@ -4,7 +4,7 @@
 
 # AI Daily Briefing
 
-A daily intelligence and topic-discovery system for AI/Web3 content creators. It collects candidate signals from first-party vendors, infrastructure providers, application products, capital markets, media outlets, developer communities, research papers, and open-source ecosystems, then turns them into a source-linked Markdown briefing and a standalone interactive HTML reader. It also produces a structured editorial packet that Codex can refine into a polished final edition.
+A daily intelligence system for the AI industry. It collects candidate signals from first-party vendors, infrastructure providers, application products, capital markets, media outlets, developer communities, and open-source ecosystems, then turns them into a source-linked Markdown briefing for email delivery. It also produces a structured editorial packet that Codex can refine into a polished final edition.
 
 Every retained item is followed immediately by a concise Chinese explanation covering who did what and the most important result or impact, so readers can understand the event without opening the source link.
 
@@ -83,18 +83,17 @@ If a Skill with the same name already exists, explicitly back it up and replace 
 - An official-account radar for 62 model-company and AI-product X accounts; Codex can search them directly, while Python can use the optional X API integration
 - Dedicated AI coding and agent coverage for Claude Code, Codex, Cursor, Copilot, Cognition/Devin, Replit, and Manus
 - Dedicated multimodal coverage for Runway, Stability AI, FLUX, Midjourney, Luma, Pika, Kling, and Vidu
-- Additional signals from Hacker News, arXiv, Hugging Face Trending, and AI HOT
-- Automated industry feeds from NVIDIA, AWS, Google Cloud, Product Hunt, Crunchbase News, TechCrunch Venture, and Data Center Dynamics, with sources such as 机器之心 routed to Codex when no stable RSS feed is available
+- Additional signals from Hacker News, Hugging Face Trending, and AI HOT
+- Automated industry feeds from NVIDIA, AMD, MLCommons, AWS, Google Cloud, Product Hunt, Crunchbase News, TechCrunch Venture, and Data Center Dynamics, with CoreWeave and sources such as 机器之心 routed to Codex when no stable RSS feed is available
 - China-first verification routes that include 36Kr, IT桔子, and HKEX disclosures; adoption and funding figures must still be confirmed with a primary source
 - Official tracking through the Anthropic sitemap and releases from Codex, Claude Code, Gemini CLI, and Transformers
-- Web3 news from CoinDesk
 - Venture and economic signals from TechCrunch Venture
 - High-quality open-source projects from GitHub Trending
 - Daily topic ideas that turn news into publishable Chinese content angles
 - Codex-friendly offline validation with `--dry-run`, unit tests, and stable output paths
 - A concise Chinese explanation for every news item and project, without repetitive labels
 - Opening sections for changes since yesterday, the AI industry chain, cross-layer connections, model releases, product updates, application trends, AI funding and commercialization, potentially viral stories, must-read items, X opportunities, B2B opportunities, and watchlist signals
-- Ranking across content value, business value, personal relevance, timeliness, and credibility, with calibrated scores instead of inflated perfect ratings
+- Final Top 10 selection by Codex based on industry significance, timeliness, source credibility, technical substance, and source diversity, without personal-profile scoring
 - Confidence labels: `Officially confirmed`, `Corroborated by multiple sources`, and `Single-source signal`
 - X drafts in three formats: single post, thread, and visual/video script
 - SQLite history for first seen, last seen, repeat count, source count, and daily ranking; repeated runs on the same day do not double-count
@@ -256,7 +255,6 @@ sources:
       url: "https://deepmind.google/blog/rss.xml"
     - name: "Hugging Face"
       url: "https://huggingface.co/blog/feed.xml"
-  web3_news: "https://www.coindesk.com/"
   venture_news: "https://techcrunch.com/category/venture/"
   github_trending: "https://github.com/trending"
   hacker_news:
@@ -317,7 +315,6 @@ limits:
   application_trends: 6
   ai_funding: 6
   cross_layer_connections: 3
-  web3_news: 3
   venture_news: 5
   github_projects: 10
   topics: 5
@@ -368,7 +365,6 @@ B2B / Business Opportunities
 Watchlist
 X Drafts
 AI News
-Web3 News
 Investment & Economy
 GitHub Projects
 Daily Topic Ideas

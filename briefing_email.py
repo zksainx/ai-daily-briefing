@@ -85,17 +85,39 @@ def _plain_text(node: Tag) -> str:
     return re.sub(r"\s+", " ", node.get_text(" ", strip=True)).strip()
 
 
-def _split_item_detail(value: str) -> tuple[str, str, str]:
+def _split_item_detail(value: str) -> tuple[str, str, str, str]:
     metadata_match = re.search(r"(来源：.*?)(?=\s+入选理由：|$)", value)
     reason_match = re.search(r"(入选理由：.*)$", value)
+    overview_match = re.search(
+        r"概述：\s*(.*?)(?=\s+技术总结：|\s+来源：|\s+入选理由：|$)",
+        value,
+    )
+    technical_match = re.search(
+        r"技术总结：\s*(.*?)(?=\s+来源：|\s+入选理由：|$)",
+        value,
+    )
     first_marker = min(
-        [match.start() for match in (metadata_match, reason_match) if match is not None],
+        [
+            match.start()
+            for match in (
+                overview_match,
+                technical_match,
+                metadata_match,
+                reason_match,
+            )
+            if match is not None
+        ],
         default=len(value),
     )
-    summary = value[:first_marker].strip()
+    summary = (
+        overview_match.group(1).strip()
+        if overview_match
+        else value[:first_marker].strip()
+    )
+    technical = technical_match.group(1).strip() if technical_match else ""
     metadata = metadata_match.group(1).strip() if metadata_match else ""
     reason = reason_match.group(1).strip() if reason_match else ""
-    return summary, metadata, reason
+    return summary, technical, metadata, reason
 
 
 def _extract_report(markdown_text: str) -> tuple[str, str, list[dict[str, str]], list[str]]:
@@ -133,19 +155,24 @@ def _extract_report(markdown_text: str) -> tuple[str, str, list[dict[str, str]],
                 title_text = _plain_text(link)
                 item_text = _plain_text(item)
                 detail = item_text[len(title_text) :].strip() if item_text.startswith(title_text) else item_text
-                summary, metadata, reason = _split_item_detail(detail)
+                summary, technical, metadata, reason = _split_item_detail(detail)
                 items.append(
                     {
                         "title": title_text,
                         "url": str(link["href"]),
                         "summary": summary,
+                        "technical": technical,
                         "metadata": metadata,
                         "reason": reason,
                     }
                 )
         elif sibling.name == "p" and items:
             value = _plain_text(sibling)
-            _, metadata, reason = _split_item_detail(value)
+            summary, technical, metadata, reason = _split_item_detail(value)
+            if summary:
+                items[-1]["summary"] = summary
+            if technical:
+                items[-1]["technical"] = technical
             if metadata:
                 items[-1]["metadata"] = metadata
             if reason:
@@ -170,6 +197,14 @@ def _item_html(number: int, item: dict[str, str]) -> str:
             '<p style="margin:12px 0 0;color:#687069;font-size:12px;line-height:1.65;">'
             f'{escape(item["metadata"])}</p>'
         )
+    technical = ""
+    if item["technical"]:
+        technical = (
+            '<p style="margin:12px 0 0;color:#28332c;font:14px/1.75 '
+            "Arial,'PingFang SC','Microsoft YaHei',sans-serif;\">"
+            '<strong style="color:#17251c;">技术总结：</strong>'
+            f'{escape(item["technical"])}</p>'
+        )
     return f"""
       <tr>
         <td style="padding:0 22px 16px;">
@@ -178,7 +213,8 @@ def _item_html(number: int, item: dict[str, str]) -> str:
             <tr>
               <td style="padding:17px 18px 18px;">
                 <a href="{escape(item['url'], quote=True)}" style="color:#142019;text-decoration:none;font:700 17px/1.45 Arial,'PingFang SC','Microsoft YaHei',sans-serif;">{number}. {escape(item['title'])}</a>
-                <p style="margin:9px 0 0;color:#28332c;font:14px/1.75 Arial,'PingFang SC','Microsoft YaHei',sans-serif;">{escape(item['summary'])}</p>
+                <p style="margin:9px 0 0;color:#28332c;font:14px/1.75 Arial,'PingFang SC','Microsoft YaHei',sans-serif;"><strong style="color:#17251c;">概述：</strong>{escape(item['summary'])}</p>
+                {technical}
                 {metadata}
               </td>
             </tr>
@@ -191,10 +227,7 @@ def render_email(markdown_text: str, *, reply_to: str = "") -> EmailBriefing:
     title, report_date, items, changes = _extract_report(markdown_text)
     if not items:
         raise ValueError("No briefing items found")
-    subject_lead = items[0]["title"]
-    if len(subject_lead) > 32:
-        subject_lead = subject_lead[:31] + "…"
-    subject = f"AI 工业界日报｜{report_date}｜{subject_lead} + {len(items) - 1} 条"
+    subject = f"AI前沿日报｜{report_date}"
     preheader = f"今日 {len(items)} 条：{items[0]['title']}，以及模型、Agent、基础设施与产业应用动态。"
 
     changes_html = ""
@@ -252,7 +285,8 @@ def render_email(markdown_text: str, *, reply_to: str = "") -> EmailBriefing:
         text_lines.extend(
             [
                 f"{index}. {item['title']}",
-                item["summary"],
+                f"概述：{item['summary']}",
+                f"技术总结：{item['technical']}",
                 item["metadata"],
                 item["url"],
                 "",
@@ -371,8 +405,11 @@ def send_smtp(
     return sent
 
 
-def delivery_key(report_date: str, recipient: str) -> str:
-    value = f"{report_date}\0{recipient.lower()}".encode("utf-8")
+def delivery_key(report_date: str, recipient: str, revision: str = "") -> str:
+    identity = f"{report_date}\0{recipient.lower()}"
+    if revision:
+        identity += f"\0{revision}"
+    value = identity.encode("utf-8")
     return hashlib.sha256(value).hexdigest()
 
 

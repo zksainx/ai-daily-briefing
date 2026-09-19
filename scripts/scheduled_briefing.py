@@ -1,83 +1,687 @@
-"""Generate and email the previous day's AI industry briefing."""
+#!/usr/bin/env python3
+"""Recoverable two-stage generator for the daily AI industry briefing."""
+
+from __future__ import annotations
+
 import argparse
-from datetime import datetime, timedelta
+from datetime import date, datetime, time, timedelta
 import fcntl
+import json
 import os
 from pathlib import Path
 import re
 import subprocess
 import sys
-import tempfile
+from typing import Any
 from zoneinfo import ZoneInfo
 
+
 ROOT = Path(__file__).resolve().parents[1]
-CODEX = '/Users/kxzhang/.nvm/versions/node/v22.17.1/bin/codex'
+CODEX = Path(
+    os.environ.get(
+        "BRIEFING_CODEX",
+        "/Users/kxzhang/.nvm/versions/node/v22.17.1/bin/codex",
+    )
+)
+TIMEZONE = ZoneInfo("Asia/Shanghai")
+STATE_ROOT = Path(
+    os.environ.get(
+        "BRIEFING_STATE_ROOT",
+        str(Path.home() / "Library" / "Application Support" / "ai-daily-briefing" / "runs"),
+    )
+)
+LOG_ROOT = Path(
+    os.environ.get(
+        "BRIEFING_LOG_ROOT",
+        str(Path.home() / "Library" / "Logs" / "ai-daily-briefing"),
+    )
+)
+OUTPUT_ROOT = Path(os.environ.get("BRIEFING_OUTPUT_ROOT", str(ROOT / "outputs")))
+RECIPIENTS = Path(
+    os.environ.get("BRIEFING_RECIPIENTS", str(ROOT / "email" / "recipients.txt"))
+)
+EMAIL_LEDGER = Path(
+    os.environ.get("BRIEFING_EMAIL_LEDGER", str(LOG_ROOT / "email-state.json"))
+)
+START_DATE = os.environ.get("BRIEFING_START_DATE", "2026-09-18")
+RETRY_DELAYS_MINUTES = (10, 30, 60)
+MODEL = "gpt-5.6-sol"
+REASONING_EFFORT = "high"
+MAX_CANDIDATES = 80
+SHORTLIST_SIZE = 30
+
 sys.path.insert(0, str(ROOT))
 
 
-def report_date(now):
-    day = now.astimezone(ZoneInfo('Asia/Shanghai')).date() - timedelta(days=1)
-    return day.isoformat()
+def atomic_write_text(path: Path, value: str) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temporary = path.with_suffix(path.suffix + ".tmp")
+    temporary.write_text(value, encoding="utf-8")
+    os.replace(temporary, path)
 
 
-def main():
-    parser = argparse.ArgumentParser()
-    parser.add_argument('--check', action='store_true')
-    args = parser.parse_args()
-    if args.check:
-        now = datetime.now(ZoneInfo('Asia/Shanghai'))
-        print(now.isoformat(), report_date(now))
+def atomic_write_json(path: Path, value: Any) -> None:
+    atomic_write_text(path, json.dumps(value, ensure_ascii=False, indent=2) + "\n")
+
+
+def read_json(path: Path, default: Any) -> Any:
+    if not path.is_file():
+        return default
+    try:
+        return json.loads(path.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, OSError):
+        return default
+
+
+def report_date(now: datetime) -> str:
+    return (now.astimezone(TIMEZONE).date() - timedelta(days=1)).isoformat()
+
+
+def date_range(start: str, end: str) -> list[str]:
+    first = date.fromisoformat(start)
+    last = date.fromisoformat(end)
+    if first > last:
+        return []
+    return [
+        (first + timedelta(days=offset)).isoformat()
+        for offset in range((last - first).days + 1)
+    ]
+
+
+def run_dir(day: str) -> Path:
+    return STATE_ROOT / day
+
+
+def state_path(day: str) -> Path:
+    return run_dir(day) / "run-state.json"
+
+
+def load_run_state(day: str) -> dict[str, Any]:
+    value = read_json(state_path(day), {})
+    if not isinstance(value, dict):
+        value = {}
+    value.setdefault("report_date", day)
+    value.setdefault("status", "pending")
+    value.setdefault("stages", {})
+    return value
+
+
+def save_run_state(day: str, state: dict[str, Any]) -> None:
+    state["updated_at"] = datetime.now(TIMEZONE).isoformat(timespec="seconds")
+    atomic_write_json(state_path(day), state)
+
+
+def stage_state(state: dict[str, Any], stage: str) -> dict[str, Any]:
+    stages = state.setdefault("stages", {})
+    return stages.setdefault(stage, {})
+
+
+def reset_retry_window_if_needed(stage: dict[str, Any], now: datetime) -> None:
+    today = now.astimezone(TIMEZONE).date().isoformat()
+    if stage.get("retry_day") != today:
+        stage["retry_day"] = today
+        stage["failures_today"] = 0
+        stage.pop("next_retry_at", None)
+        stage.pop("exhausted_for_day", None)
+
+
+def stage_is_due(stage: dict[str, Any], now: datetime) -> bool:
+    reset_retry_window_if_needed(stage, now)
+    if stage.get("exhausted_for_day"):
+        return False
+    next_retry = stage.get("next_retry_at")
+    if not next_retry:
+        return True
+    try:
+        return now >= datetime.fromisoformat(next_retry)
+    except ValueError:
+        return True
+
+
+def record_stage_success(
+    day: str, state: dict[str, Any], name: str, now: datetime
+) -> None:
+    stage = stage_state(state, name)
+    stage.update(
+        {
+            "status": "complete",
+            "completed_at": now.isoformat(timespec="seconds"),
+            "failures_today": 0,
+        }
+    )
+    stage.pop("next_retry_at", None)
+    stage.pop("exhausted_for_day", None)
+    state["status"] = f"{name}_complete"
+    state.pop("last_error", None)
+    save_run_state(day, state)
+
+
+def record_stage_failure(
+    day: str,
+    state: dict[str, Any],
+    name: str,
+    now: datetime,
+    error: str,
+) -> None:
+    stage = stage_state(state, name)
+    reset_retry_window_if_needed(stage, now)
+    failures = int(stage.get("failures_today", 0)) + 1
+    stage.update(
+        {
+            "status": "failed",
+            "failures_today": failures,
+            "last_attempt_at": now.isoformat(timespec="seconds"),
+            "last_error": error[-4000:],
+        }
+    )
+    if failures <= len(RETRY_DELAYS_MINUTES):
+        delay = RETRY_DELAYS_MINUTES[failures - 1]
+        stage["next_retry_at"] = (now + timedelta(minutes=delay)).isoformat(
+            timespec="seconds"
+        )
+        stage.pop("exhausted_for_day", None)
+    else:
+        stage.pop("next_retry_at", None)
+        stage["exhausted_for_day"] = now.date().isoformat()
+    state["status"] = f"{name}_failed"
+    state["last_error"] = {"stage": name, "message": error[-4000:]}
+    save_run_state(day, state)
+
+
+def error_with_log(error: Exception, log_path: Path) -> str:
+    detail = f"{type(error).__name__}: {error}"
+    if log_path.is_file():
+        tail = log_path.read_text(encoding="utf-8", errors="replace")[-4000:]
+        if tail.strip():
+            detail += "\n" + tail
+    return detail
+
+
+def candidate_packet_is_valid(path: Path, day: str) -> bool:
+    value = read_json(path, {})
+    candidates = value.get("candidates", []) if isinstance(value, dict) else []
+    return (
+        value.get("report_date") == day
+        and isinstance(candidates, list)
+        and 0 < len(candidates) <= MAX_CANDIDATES
+        and all(isinstance(row, dict) and row.get("candidate_id") for row in candidates)
+    )
+
+
+def collect_candidates(day: str, destination: Path) -> None:
+    from briefing import DailyBriefing
+
+    briefing = DailyBriefing(
+        config_path=str(ROOT / "config.yaml"), history_enabled=False
+    )
+    data = briefing.generate_data()
+    rows = data.get("sections", {}).get("editorial_queue", [])[:MAX_CANDIDATES]
+    if not rows:
+        raise RuntimeError("No candidates; refusing to publish an empty report")
+    candidates = []
+    for index, row in enumerate(rows, 1):
+        candidate = dict(row)
+        candidate["candidate_id"] = index
+        candidates.append(candidate)
+    packet = {
+        "report_date": day,
+        "timezone": "Asia/Shanghai",
+        "cutoff_at": datetime.combine(
+            date.fromisoformat(day) + timedelta(days=1), time.min, TIMEZONE
+        ).isoformat(),
+        "collected_at": datetime.now(TIMEZONE).isoformat(timespec="seconds"),
+        "candidate_count": len(candidates),
+        "candidates": candidates,
+        "source_health": getattr(briefing, "source_health", {}),
+    }
+    atomic_write_json(destination, packet)
+
+
+def selection_is_valid(selection_path: Path, packet_path: Path) -> bool:
+    selection = read_json(selection_path, {})
+    packet = read_json(packet_path, {})
+    candidates = packet.get("candidates", []) if isinstance(packet, dict) else []
+    selected = (
+        selection.get("selected_candidate_ids", [])
+        if isinstance(selection, dict)
+        else []
+    )
+    target = min(SHORTLIST_SIZE, len(candidates))
+    valid_ids = {row.get("candidate_id") for row in candidates}
+    return (
+        len(selected) == target
+        and len(set(selected)) == target
+        and all(isinstance(value, int) and value in valid_ids for value in selected)
+    )
+
+
+def shortlist_is_valid(shortlist_path: Path, packet_path: Path) -> bool:
+    shortlist = read_json(shortlist_path, {})
+    packet = read_json(packet_path, {})
+    rows = shortlist.get("candidates", []) if isinstance(shortlist, dict) else []
+    target = min(
+        SHORTLIST_SIZE,
+        len(packet.get("candidates", [])) if isinstance(packet, dict) else 0,
+    )
+    return (
+        shortlist.get("report_date") == packet.get("report_date")
+        and len(rows) == target
+        and len({row.get("candidate_id") for row in rows}) == target
+    )
+
+
+def build_shortlist(packet_path: Path, selection_path: Path, output_path: Path) -> None:
+    packet = read_json(packet_path, {})
+    selection = read_json(selection_path, {})
+    selected = selection["selected_candidate_ids"]
+    by_id = {row["candidate_id"]: row for row in packet["candidates"]}
+    atomic_write_json(
+        output_path,
+        {
+            "report_date": packet["report_date"],
+            "selected_at": datetime.now(TIMEZONE).isoformat(timespec="seconds"),
+            "candidate_count": len(selected),
+            "candidates": [by_id[value] for value in selected],
+        },
+    )
+
+
+def codex_base_command(*, writable_dir: Path, web: bool) -> list[str]:
+    search_mode = "live" if web else "disabled"
+    return [
+        str(CODEX),
+        "exec",
+        "-C",
+        str(ROOT),
+        "--model",
+        MODEL,
+        "-c",
+        f'model_reasoning_effort="{REASONING_EFFORT}"',
+        "--sandbox",
+        "workspace-write" if web else "read-only",
+        "-c",
+        f"sandbox_workspace_write.network_access={'true' if web else 'false'}",
+        "-c",
+        f'web_search="{search_mode}"',
+        "--ephemeral",
+        "--color",
+        "never",
+        "--add-dir",
+        str(writable_dir),
+    ]
+
+
+def run_codex(command: list[str], prompt: str, log_path: Path, timeout: int) -> None:
+    log_path.parent.mkdir(parents=True, exist_ok=True)
+    with log_path.open("w", encoding="utf-8") as log:
+        subprocess.run(
+            command + [prompt],
+            check=True,
+            timeout=timeout,
+            stdout=log,
+            stderr=subprocess.STDOUT,
+        )
+
+
+def run_selection(day: str, directory: Path, attempt: int) -> None:
+    packet = directory / "candidates.json"
+    response = directory / "selection-response.json"
+    schema = directory / "selection-schema.json"
+    selection = directory / "selection.json"
+    shortlist = directory / "shortlist.json"
+    target = min(SHORTLIST_SIZE, len(read_json(packet, {})["candidates"]))
+    atomic_write_json(
+        schema,
+        {
+            "type": "object",
+            "properties": {
+                "selected_candidate_ids": {
+                    "type": "array",
+                    "items": {"type": "integer"},
+                    "minItems": target,
+                    "maxItems": target,
+                }
+            },
+            "required": ["selected_candidate_ids"],
+            "additionalProperties": False,
+        },
+    )
+    prompt = f"""You are stage 1 of an AI industry daily briefing pipeline.
+Read the fixed candidate packet at {packet}. It contains at most 80 already collected candidates for report date {day}.
+Select exactly {target} candidate IDs for a verification shortlist. Judge editorially; do not use keyword scoring and do not browse the web. Cover consequential company releases and changes across foundation models, multimodal, world models, embodied AI, agents, developer products, chips, data centers, cloud/inference infrastructure, adoption, and major commercial events. Exclude academic papers and purely academic research. Prefer recent, concrete and non-duplicate events from credible sources, including strong industry media and analysis such as SemiAnalysis, not only company homepages.
+Exclude cryptocurrency and blockchain stories even when they mention AI. Do not use a personal profile, named-person preference, legacy personalization score, or feedback-derived preference adjustment. Judge industry significance, timeliness, source credibility, technical substance, and source diversity directly.
+Return only the requested JSON containing selected_candidate_ids. Do not write per-candidate inclusion/exclusion reasons and do not write the final briefing."""
+    command = codex_base_command(writable_dir=directory, web=False) + [
+        "--output-schema",
+        str(schema),
+        "--output-last-message",
+        str(response),
+    ]
+    log = directory / f"selection-attempt-{attempt}.log"
+    run_codex(command, prompt, log, timeout=2700)
+    parsed = json.loads(response.read_text(encoding="utf-8"))
+    atomic_write_json(selection, parsed)
+    if not selection_is_valid(selection, packet):
+        raise RuntimeError("Stage 1 returned an invalid 30-candidate selection")
+    build_shortlist(packet, selection, shortlist)
+
+
+def initialize_verification_progress(day: str, shortlist_path: Path, path: Path) -> None:
+    if path.is_file():
         return
-    day = report_date(datetime.now(ZoneInfo('Asia/Shanghai')))
-    state = Path('/Users/kxzhang/Library/Logs/ai-daily-briefing')
-    state.mkdir(parents=True, exist_ok=True)
-    with (state / 'schedule.lock').open('w') as lock:
+    shortlist = read_json(shortlist_path, {})
+    atomic_write_json(
+        path,
+        {
+            "report_date": day,
+            "status": "pending",
+            "checked_candidate_ids": [],
+            "candidates": [
+                {
+                    "candidate_id": row["candidate_id"],
+                    "status": "pending",
+                    "verified_url": "",
+                    "verified_publication_date": "",
+                    "notes": "",
+                }
+                for row in shortlist["candidates"]
+            ],
+        },
+    )
+
+
+def validate_draft(path: Path, expected_day: str | None = None) -> None:
+    if not path.is_file():
+        raise RuntimeError("Stage 2 did not create a Markdown draft")
+    text = path.read_text(encoding="utf-8")
+    first_line = text.splitlines()[0] if text.splitlines() else ""
+    if expected_day and expected_day not in first_line:
+        raise RuntimeError(f"Draft title does not contain report date {expected_day}")
+    if "## 本日十条行业信号" not in text:
+        raise RuntimeError("Draft is missing the daily Top 10 section")
+    forbidden = ("入选理由", "为什么重要", "这不代表", "不能据此认为", "仍需")
+    matched = next((phrase for phrase in forbidden if phrase in text), "")
+    if matched:
+        raise RuntimeError(f"Draft contains forbidden editorial filler: {matched}")
+    count = len(re.findall(r"^\d+\. \[", text, re.MULTILINE))
+    if not 1 <= count <= 10:
+        raise RuntimeError(f"Expected 1-10 editorial items, got {count}")
+    blocks = re.findall(
+        r"(?ms)^\d+\. \[[^\]]+\]\(https?://[^)]+\)\n(.*?)(?=^\d+\. \[|^## |\Z)",
+        text,
+    )
+    if len(blocks) != count:
+        raise RuntimeError("Could not parse every Top 10 item for format validation")
+    for index, block in enumerate(blocks, 1):
+        overview = re.search(r"(?m)^\s{3,}概述：\s*(\S.*)$", block)
+        technical = re.search(r"(?m)^\s{3,}技术总结：\s*(\S.*)$", block)
+        metadata = re.search(r"(?m)^\s{3,}来源：\s*(\S.*)$", block)
+        if not overview or not technical or not metadata:
+            raise RuntimeError(
+                f"Item {index} must contain indented 概述、技术总结 and 来源 paragraphs"
+            )
+        for label, paragraph in (
+            ("概述", overview.group(1)),
+            ("技术总结", technical.group(1)),
+        ):
+            sentence_count = len(re.findall(r"[^。！？!?]+[。！？!?]", paragraph))
+            if not 2 <= sentence_count <= 3:
+                raise RuntimeError(
+                    f"Item {index} {label} must contain 2-3 sentences, got {sentence_count}"
+                )
+    result = subprocess.run(
+        [
+            sys.executable,
+            str(ROOT / "skills/daily-briefing/scripts/validate-briefing.py"),
+            str(path),
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    if result.returncode:
+        raise RuntimeError((result.stdout + "\n" + result.stderr).strip())
+
+
+def run_verification(day: str, directory: Path, attempt: int) -> None:
+    shortlist = directory / "shortlist.json"
+    progress = directory / "verification-progress.json"
+    draft = directory / f"briefing_{day}.draft.md"
+    initialize_verification_progress(day, shortlist, progress)
+    shortlist_count = len(read_json(shortlist, {}).get("candidates", []))
+    prompt = f"""You are stage 2 of a recoverable AI industry daily briefing pipeline.
+Report date: {day} in Asia/Shanghai; the cutoff is the following midnight. Read only the {shortlist_count}-candidate shortlist at {shortlist}. The persistent verification state is {progress}, and the persistent Markdown draft is {draft}.
+
+Resume from the existing progress and draft when present. Open original sources for shortlisted candidates, verify facts and actual publication dates (not sitemap modification dates), and reject anything after the cutoff. Use other credible pages only to corroborate shortlisted events; every final item must correspond to a shortlist candidate. Update {progress} in small batches while working, preserving checked_candidate_ids and concise factual notes so a later retry can continue. Do not write long selection rationales.
+
+Choose up to 10 of the strongest verified AI INDUSTRY stories across models, multimodal, world models, embodied AI, products, agents, infrastructure, adoption and commercialization. Do not include academic papers or purely academic research. Write the complete final Chinese Markdown to {draft}, beginning with `# AI 工业界前沿简报 · {day}`. Under `## 本日十条行业信号`, every item must use this exact structure, including the three-space indentation:
+Exclude cryptocurrency and blockchain stories even when they mention AI. Do not use a personal profile, named-person preference, legacy personalization score, or feedback-derived preference adjustment.
+
+1. [标题](原始链接)
+   概述：用 2-3 句说明主体、发布或变化、可用范围以及关键结果。
+
+   技术总结：用 2-3 句说明来源明确披露的架构、接口、部署方式、实现变化或测试设置。商业或政策事件也要写其产品机制、实施流程或基础设施细节，不要编造未披露的技术。
+
+   来源：来源名称｜发布日期：YYYY-MM-DD｜置信度：高/中高/中
+
+Both 概述 and 技术总结 are required for every item and must be separate paragraphs. Each sentence must add a distinct fact. Include no 入选理由/为什么重要, generic editorial judgment, rebuttal-style caveats, or filler. Use fewer than 10 items if evidence is insufficient.
+
+Run `.venv/bin/python skills/daily-briefing/scripts/validate-briefing.py {draft}` and fix the draft until it passes. Then mark {progress} status complete. Produce only this Markdown draft and progress JSON; do not send email, generate HTML, edit project code/config/skills, or collect a new candidate pool."""
+    command = codex_base_command(writable_dir=directory, web=True)
+    log = directory / f"verification-attempt-{attempt}.log"
+    run_codex(command, prompt, log, timeout=5400)
+    validate_draft(draft, day)
+
+
+def mark_verification_complete(day: str, directory: Path) -> None:
+    path = directory / "verification-progress.json"
+    progress = read_json(path, {})
+    if not isinstance(progress, dict):
+        progress = {"report_date": day}
+    progress["status"] = "complete"
+    progress["completed_at"] = datetime.now(TIMEZONE).isoformat(timespec="seconds")
+    atomic_write_json(path, progress)
+
+
+def email_delivery_complete(day: str) -> bool:
+    from briefing_email import delivery_key, load_recipients, read_delivery_state
+
+    recipients = load_recipients(RECIPIENTS)
+    if not recipients:
+        raise RuntimeError("Recipient list is empty")
+    ledger = read_delivery_state(EMAIL_LEDGER)
+    return all(delivery_key(day, recipient) in ledger for recipient in recipients)
+
+
+def send_email(md: Path) -> None:
+    subprocess.run(
+        [
+            sys.executable,
+            str(ROOT / "scripts/send_briefing_email.py"),
+            "--markdown",
+            str(md),
+            "--recipients",
+            str(RECIPIENTS),
+            "--state-file",
+            str(EMAIL_LEDGER),
+            "--send",
+        ],
+        check=True,
+        timeout=900,
+    )
+
+
+def process_day(day: str, now: datetime, *, no_send: bool = False) -> str:
+    directory = run_dir(day)
+    directory.mkdir(parents=True, exist_ok=True)
+    try:
+        directory.chmod(0o700)
+    except OSError:
+        pass
+    state = load_run_state(day)
+    md = OUTPUT_ROOT / f"briefing_{day}.md"
+    packet = directory / "candidates.json"
+    selection = directory / "selection.json"
+    shortlist = directory / "shortlist.json"
+    draft = directory / f"briefing_{day}.draft.md"
+
+    if state.get("status") == "email_complete":
+        return "complete"
+
+    stages = (
+        (
+            "collection",
+            lambda attempt: collect_candidates(day, packet),
+            lambda: candidate_packet_is_valid(packet, day),
+        ),
+        (
+            "selection",
+            lambda attempt: run_selection(day, directory, attempt),
+            lambda: selection_is_valid(selection, packet)
+            and shortlist_is_valid(shortlist, packet),
+        ),
+        (
+            "verification",
+            lambda attempt: run_verification(day, directory, attempt),
+            lambda: md.is_file() or draft.is_file(),
+        ),
+    )
+
+    for name, action, artifact_exists in stages:
+        if name == "verification" and md.is_file():
+            record_stage_success(day, state, name, now)
+            continue
+        if name == "verification" and draft.is_file():
+            try:
+                validate_draft(draft, day)
+                OUTPUT_ROOT.mkdir(parents=True, exist_ok=True)
+                os.replace(draft, md)
+                mark_verification_complete(day, directory)
+                print(f"Recovered and published {md}", flush=True)
+                record_stage_success(day, state, name, datetime.now(TIMEZONE))
+                continue
+            except Exception:
+                # Keep the partial draft in place so the next Codex attempt can
+                # revise it together with the saved verification progress.
+                pass
+        if name != "verification" and artifact_exists():
+            record_stage_success(day, state, name, now)
+            continue
+        stage = stage_state(state, name)
+        if not stage_is_due(stage, now):
+            save_run_state(day, state)
+            return "waiting"
+        attempt = int(stage.get("attempts_total", 0)) + 1
+        stage["attempts_total"] = attempt
+        stage["last_attempt_at"] = now.isoformat(timespec="seconds")
+        state["status"] = f"{name}_running"
+        save_run_state(day, state)
+        try:
+            action(attempt)
+            if name == "verification":
+                validate_draft(draft, day)
+                OUTPUT_ROOT.mkdir(parents=True, exist_ok=True)
+                os.replace(draft, md)
+                mark_verification_complete(day, directory)
+                print(f"Published {md}", flush=True)
+            elif not artifact_exists():
+                raise RuntimeError(f"{name} did not produce a valid persistent artifact")
+            record_stage_success(day, state, name, datetime.now(TIMEZONE))
+        except Exception as error:
+            log = directory / f"{name}-attempt-{attempt}.log"
+            message = error_with_log(error, log)
+            record_stage_failure(day, state, name, datetime.now(TIMEZONE), message)
+            print(
+                f"{day} {name} failed; retry scheduled: {message}",
+                file=sys.stderr,
+                flush=True,
+            )
+            return "failed"
+
+    validate_draft(md, day)
+    if no_send:
+        return "ready"
+    if email_delivery_complete(day):
+        state["status"] = "email_complete"
+        state["email_completed_at"] = now.isoformat(timespec="seconds")
+        save_run_state(day, state)
+        return "complete"
+
+    email_stage = stage_state(state, "email")
+    if not stage_is_due(email_stage, now):
+        save_run_state(day, state)
+        return "waiting"
+    attempt = int(email_stage.get("attempts_total", 0)) + 1
+    email_stage["attempts_total"] = attempt
+    try:
+        send_email(md)
+        if not email_delivery_complete(day):
+            raise RuntimeError("Email command finished but the delivery ledger is incomplete")
+        record_stage_success(day, state, "email", datetime.now(TIMEZONE))
+        state["status"] = "email_complete"
+        state["email_completed_at"] = datetime.now(TIMEZONE).isoformat(timespec="seconds")
+        save_run_state(day, state)
+        return "complete"
+    except Exception as error:
+        record_stage_failure(day, state, "email", datetime.now(TIMEZONE), str(error))
+        print(
+            f"{day} email failed; retry scheduled: {error}",
+            file=sys.stderr,
+            flush=True,
+        )
+        return "failed"
+
+
+def print_status(now: datetime) -> None:
+    end = report_date(now)
+    print(f"now={now.isoformat()} latest_report_date={end} state_root={STATE_ROOT}")
+    for day in date_range(START_DATE, end):
+        state = load_run_state(day)
+        md = OUTPUT_ROOT / f"briefing_{day}.md"
+        print(f"{day} status={state.get('status')} markdown={md.is_file()}")
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser()
+    parser.add_argument(
+        "--check", action="store_true", help="Print recovery state without running"
+    )
+    parser.add_argument(
+        "--report-date", help="Process one explicit date instead of the backlog"
+    )
+    parser.add_argument(
+        "--no-send", action="store_true", help="Generate Markdown without email"
+    )
+    args = parser.parse_args()
+    now = datetime.now(TIMEZONE)
+    if args.check:
+        print_status(now)
+        return 0
+
+    LOG_ROOT.mkdir(parents=True, exist_ok=True)
+    STATE_ROOT.mkdir(parents=True, exist_ok=True)
+    OUTPUT_ROOT.mkdir(parents=True, exist_ok=True)
+    with (LOG_ROOT / "schedule.lock").open("w") as lock:
         try:
             fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
         except BlockingIOError:
-            return
-        output = ROOT / 'outputs'
-        output.mkdir(exist_ok=True)
-        md = output / f'briefing_{day}.md'
-        if not md.exists():
-            from briefing import DailyBriefing
-            with tempfile.TemporaryDirectory(prefix='ai-briefing-') as scratch:
-                scratch = Path(scratch)
-                briefing = DailyBriefing(config_path=str(ROOT / 'config.yaml'), history_enabled=False)
-                data = briefing.generate_data()
-                if not data['sections']['editorial_queue']:
-                    raise RuntimeError('No candidates; refusing to publish an empty report')
-                packet = scratch / 'candidates.json'
-                packet.write_text(briefing.format_output(data, 'json'), encoding='utf-8')
-                draft = scratch / md.name
-                prompt = f'''Read skills/daily-briefing/SKILL.md and complete the fixed-pool editorial workflow.
-Report date: {day}, Asia/Shanghai, ending at the following midnight. The already collected candidate packet is {packet}.
-Read all up to 80 candidates and their raw summaries. Independently select the ten most important AI INDUSTRY stories, Chinese and international, including models, multimodal, embodied AI, products, agents, infrastructure and commercialization. SemiAnalysis is an important industry-analysis source. No keyword scoring or automatic ranking. No academic-paper coverage. Do not collect another pool.
-Open original sources for shortlisted stories, verify facts and actual publication dates (not sitemap modification dates); exclude anything published after the report cutoff. Prioritize the report day; if recent supplemental stories are necessary, explicitly label their dates. Never fabricate ten stories if evidence is insufficient.
-Write the final Chinese Top 10 to {draft}. Each linked item should contain only a concrete three- or four-sentence Chinese news summary followed by source/date/confidence metadata. Do not write an "入选理由" or "为什么重要" paragraph in the final briefing: candidate inclusion/exclusion reasoning belongs only in your private scratch reasoning. Each sentence should add distinct information; use fewer sentences when the source lacks detail, without padding or inventing facts. For technical stories, add three or four factual sentences describing the architecture, interface, deployment method, implementation change, or benchmark setup when the source supports it. Do not append rebuttal-style sentences such as "这不代表……", "不能据此认为……", "仍需……", or generic caveats; state the supported facts directly and preserve source attribution in the metadata. All final items must come from the supplied candidate pool. Keep any reasoning log only in {scratch}; do not produce a selection file or candidate files in outputs.
-Run .venv/bin/python skills/daily-briefing/scripts/validate-briefing.py on your draft. Finish the editorial pass in this run, not just a plan or collection status. This is an email-only workflow: produce only the Markdown draft, without a standalone HTML file. The runner will publish the Markdown and send email generated directly from it. Do not modify code, config, skills, existing reports or any other files. No commits or messages to external services.'''
-                subprocess.run([CODEX, 'exec', '-C', str(ROOT), '--model', 'gpt-5.6-sol',
-                                '-c', 'model_reasoning_effort="high"',
-                                '--sandbox', 'workspace-write',
-                                '-c', 'sandbox_workspace_write.network_access=true',
-                                '-c', 'web_search="live"', '--ephemeral', '--color', 'never',
-                                '--add-dir', str(scratch), prompt], check=True, timeout=5400)
-                text = draft.read_text(encoding='utf-8')
-                count = len(re.findall(r'^\d+\. \[', text, re.MULTILINE))
-                if not 1 <= count <= 10:
-                    raise RuntimeError(f'Expected 1-10 editorial items, got {count}')
-                subprocess.run([sys.executable, str(ROOT / 'skills/daily-briefing/scripts/validate-briefing.py'), str(draft)], check=True)
-                os.replace(draft, md)
-                print(f'Published {md}', flush=True)
+            print("Another briefing run is active; exiting.")
+            return 0
 
-        subprocess.run([
-            sys.executable,
-            str(ROOT / 'scripts/send_briefing_email.py'),
-            '--markdown', str(md),
-            '--recipients', str(ROOT / 'email/recipients.txt'),
-            '--send',
-        ], check=True)
+        days = (
+            [args.report_date]
+            if args.report_date
+            else date_range(START_DATE, report_date(now))
+        )
+        exit_code = 0
+        for day in days:
+            result = process_day(day, datetime.now(TIMEZONE), no_send=args.no_send)
+            print(f"{day}: {result}", flush=True)
+            if result in {"failed", "waiting"}:
+                exit_code = 1 if result == "failed" else 0
+                break
+        return exit_code
 
 
-if __name__ == '__main__':
-    main()
+if __name__ == "__main__":
+    raise SystemExit(main())

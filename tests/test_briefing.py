@@ -28,28 +28,23 @@ class DailyBriefingTests(unittest.TestCase):
         data = self.generate_quietly(briefing)
         output = briefing.format_output(data, "text")
 
-        self.assertIn("Rion 每日早报", output)
-        self.assertIn("AI 热点", output)
-        self.assertIn("Web3 热点", output)
-        self.assertIn("GitHub 优质项目", output)
-        self.assertIn("相比昨天的新变化", output)
-        self.assertIn("今日必须看", output)
-        self.assertIn("B端/商业机会", output)
-        self.assertIn("持续跟踪", output)
-        self.assertIn("适合发 X 的选题", output)
-        self.assertIn("今日选题素材", output)
+        self.assertIn("原始候选采集", output)
+        self.assertIn("等待编辑逐条判断并选择 Top 10", output)
+        self.assertIn("OpenAI 发布新的开发者工具", output)
+        self.assertNotIn("CoinDesk", output)
 
-    def test_industry_profile_excludes_academic_web3_and_discovery_samples(self):
+    def test_industry_profile_uses_raw_candidate_packet(self):
         briefing = DailyBriefing(dry_run=True)
         data = self.generate_quietly(briefing)
         markdown = briefing.format_output(data, "markdown")
 
         self.assertEqual(data["metadata"]["title"], "AI 工业界前沿简报")
-        self.assertIn("## 本日十条行业信号", markdown)
-        self.assertNotIn("新论文提出", markdown)
-        self.assertNotIn("Web3 热点", markdown)
-        self.assertNotIn("Hacker News", markdown)
-        self.assertNotIn("Hugging Face Trending", markdown)
+        self.assertIn("# 原始候选采集", markdown)
+        self.assertEqual(
+            data["metadata"]["editorial_review"]["selection_method"],
+            "agent_editorial_judgment",
+        )
+        self.assertNotIn("web3_news", data["sections"])
 
     def test_industry_highlights_fill_top_ten_and_filter_non_capital_infra(self):
         briefing = DailyBriefing(dry_run=True)
@@ -81,7 +76,7 @@ class DailyBriefingTests(unittest.TestCase):
         output = briefing.format_output(data, "json")
         parsed = json.loads(output)
 
-        self.assertEqual(parsed["metadata"]["title"], "Rion 每日早报")
+        self.assertEqual(parsed["metadata"]["title"], "AI 工业界前沿简报")
         self.assertTrue(parsed["metadata"]["dry_run"])
         self.assertIn("ai_news", parsed["sections"])
         self.assertIn("highlights", parsed["sections"])
@@ -109,15 +104,12 @@ class DailyBriefingTests(unittest.TestCase):
         self.assertIn("summary_cn", parsed["sections"]["ai_news"][0])
         self.assertIn("category", parsed["sections"]["ai_news"][0])
         self.assertIn("tags", parsed["sections"]["ai_news"][0])
-        self.assertIn("rion_score", parsed["sections"]["ai_news"][0])
-        self.assertIn("rion_reason", parsed["sections"]["ai_news"][0])
         self.assertIn("content_value", parsed["sections"]["ai_news"][0])
-        self.assertIn("matched_signals", parsed["sections"]["ai_news"][0])
         self.assertIn("overall_score", parsed["sections"]["ai_news"][0])
         self.assertIn("business_score", parsed["sections"]["ai_news"][0])
-        self.assertIn("personal_relevance", parsed["sections"]["ai_news"][0])
         self.assertIn("timeliness_score", parsed["sections"]["ai_news"][0])
         self.assertIn("credibility_score", parsed["sections"]["ai_news"][0])
+        self.assertNotIn("personalization", briefing.config)
         self.assertEqual(parsed["metadata"]["editorial_mode"], "codex-ready")
         self.assertGreater(
             parsed["metadata"]["official_x_monitor"]["search_group_count"], 0
@@ -142,35 +134,10 @@ class DailyBriefingTests(unittest.TestCase):
         data = self.generate_quietly(briefing)
         markdown = briefing.format_output(data, "markdown")
 
-        self.assertIn("## 相比昨天的新变化", markdown)
-        self.assertIn("## 最新模型发布", markdown)
-        self.assertIn("## 产品与工具更新", markdown)
-        self.assertIn("## AI 产业链全景", markdown)
-        self.assertIn("## 产业链联动", markdown)
-        self.assertIn("## 应用层趋势", markdown)
-        self.assertIn("## AI 投融资与商业化", markdown)
-        self.assertIn("## 可能爆火的 AI 新闻", markdown)
-        self.assertIn("## 模型公司官方账号动态", markdown)
-        self.assertIn("## 今日必须看", markdown)
-        self.assertIn("## 适合发 X 的选题", markdown)
-        self.assertIn("## B端/商业机会", markdown)
-        self.assertIn("## 持续跟踪", markdown)
-        self.assertIn("## X 草稿", markdown)
-        self.assertIn("角度：", markdown)
-        self.assertIn("形式：", markdown)
-        self.assertIn("标签：", markdown)
-        self.assertIn("综合 ", markdown)
-        self.assertIn("可信 ", markdown)
-        self.assertNotIn("Rion 相关度", markdown)
-        self.assertIn("## 支持这个项目 / Support the Project", markdown)
-        self.assertIn("please consider giving the project a Star", markdown)
-        self.assertEqual(
-            markdown.count("https://github.com/Rion-Wu-tech/ai-daily-briefing"),
-            1,
-        )
-        self.assertGreaterEqual(len(data["sections"]["highlights"]), 1)
-        self.assertGreaterEqual(len(data["sections"]["x_topics"]), 1)
-        self.assertGreaterEqual(len(data["sections"]["x_drafts"]), 1)
+        self.assertIn("# 原始候选采集", markdown)
+        self.assertIn("等待编辑逐条判断并选择 Top 10", markdown)
+        self.assertNotIn("## 本日十条行业信号", markdown)
+        self.assertEqual(len(data["sections"]["highlights"]), 0)
         self.assertGreaterEqual(len(data["sections"]["model_releases"]), 1)
         self.assertGreaterEqual(len(data["sections"]["product_updates"]), 1)
         self.assertGreaterEqual(len(data["sections"]["viral_ai_news"]), 1)
@@ -193,10 +160,8 @@ class DailyBriefingTests(unittest.TestCase):
         self.assertIsNotNone(soup.select_one("#layer-filter"))
         self.assertIsNotNone(soup.select_one("#saved-filter"))
         self.assertIsNotNone(soup.select_one("#source-markdown"))
-        self.assertGreaterEqual(len(soup.select(".briefing-section")), 8)
-        self.assertGreaterEqual(len(soup.select(".briefing-card")), 8)
-        self.assertIn("相比昨天的新变化", html)
-        self.assertIn("支持这个项目 / Support the Project", html)
+        self.assertGreaterEqual(len(soup.select(".briefing-section")), 1)
+        self.assertIn("原始候选采集", html)
         self.assertNotIn("<script src=", html)
         self.assertNotIn("<link rel=\"stylesheet\"", html)
 
@@ -238,27 +203,29 @@ class DailyBriefingTests(unittest.TestCase):
 
         self.assertEqual(result.returncode, 0, result.stderr)
 
-    def test_x_drafts_are_structured_and_copyable(self):
+    def test_industry_profile_disables_x_drafts(self):
         briefing = DailyBriefing(dry_run=True)
+        briefing.config["editorial"]["raw_candidates"] = False
+        briefing.config["limits"]["x_topics"] = 5
+        briefing.config["limits"]["x_drafts"] = 3
         data = self.generate_quietly(briefing)
         markdown = briefing.format_output(data, "markdown")
         text = briefing.format_output(data, "text")
         drafts = data["sections"]["x_drafts"]
 
-        self.assertGreaterEqual(len(drafts), 1)
-        self.assertIn("body", drafts[0])
-        self.assertIn("source", drafts[0])
-        self.assertIn("url", drafts[0])
-        self.assertIn("```text", markdown)
-        self.assertIn("X 草稿", text)
-        self.assertTrue("AI" in drafts[0]["body"] or "Web3" in drafts[0]["body"])
+        self.assertEqual(drafts, [])
+        self.assertNotIn("```text", markdown)
+        self.assertNotIn("X 草稿", text)
 
     def test_x_drafts_keep_source_diversity(self):
         briefing = DailyBriefing(dry_run=True)
+        briefing.config["editorial"]["raw_candidates"] = False
+        briefing.config["limits"]["x_topics"] = 5
+        briefing.config["limits"]["x_drafts"] = 3
         items = []
         for section, name, title, tags in [
             ("ai", "AI 热点", "AI video tool", ["视频/多模态"]),
-            ("web3", "Web3 热点", "Bitcoin market signal", ["Web3"]),
+            ("venture", "投资 & 经济", "AI startup funding", ["融资/IPO"]),
             ("github", "GitHub 优质项目", "sample/agent-tool", ["Agent"]),
             ("github", "GitHub 优质项目", "sample/agent-tool-2", ["Agent"]),
         ]:
@@ -272,8 +239,6 @@ class DailyBriefingTests(unittest.TestCase):
                     "tags": tags,
                     "summary_cn": "适合做内容。",
                     "score": 90,
-                    "rion_score": 100,
-                    "rion_reason": "适合 Rion。",
                     "content_value": "优先跟进",
                 }
             )
@@ -282,10 +247,10 @@ class DailyBriefingTests(unittest.TestCase):
         sources = {draft["source"] for draft in drafts}
 
         self.assertIn("AI video tool", sources)
-        self.assertIn("Bitcoin market signal", sources)
+        self.assertIn("AI startup funding", sources)
         self.assertIn("sample/agent-tool", sources)
 
-    def test_personalization_adds_rion_relevance_fields(self):
+    def test_enrichment_has_no_personalization_fields(self):
         briefing = DailyBriefing(dry_run=True)
         project = {
             "name": "sample/codex-agent-workflow",
@@ -298,13 +263,13 @@ class DailyBriefingTests(unittest.TestCase):
 
         briefing._enrich_project_item(project)
 
-        self.assertGreaterEqual(project["personal_relevance"], 80)
-        self.assertEqual(project["content_value"], "适合发 X")
+        self.assertIn(project["content_value"], {"优先跟进", "适合发 X", "值得关注", "可看"})
         self.assertLessEqual(project["overall_score"], 96)
-        self.assertIn("Agent / AI 编码", project["matched_signals"])
-        self.assertIn("Codex", project["rion_reason"])
+        self.assertNotIn("personal_relevance", project)
+        self.assertNotIn("rion_score", project)
+        self.assertNotIn("rion_reason", project)
 
-    def test_personalized_ranking_can_beat_generic_heat(self):
+    def test_general_ranking_does_not_add_personalization(self):
         briefing = DailyBriefing(dry_run=True)
         hot_generic = {
             "name": "popular/rom-manager",
@@ -314,7 +279,7 @@ class DailyBriefingTests(unittest.TestCase):
             "today_stars": "2,000 stars today",
             "url": "https://github.com/popular/rom-manager",
         }
-        rion_fit = {
+        agent_tool = {
             "name": "sample/codex-agent-workflow",
             "description": "Codex agent workflow toolkit for B2B automation.",
             "language": "Python",
@@ -322,13 +287,12 @@ class DailyBriefingTests(unittest.TestCase):
             "today_stars": "100 stars today",
             "url": "https://github.com/sample/codex-agent-workflow",
         }
-        for project in [hot_generic, rion_fit]:
+        for project in [hot_generic, agent_tool]:
             briefing._enrich_project_item(project)
 
-        items = briefing.all_content_items([], [], [], [hot_generic, rion_fit])
-        topics = briefing.generate_x_topics(items)
-
-        self.assertEqual(topics[0]["source"], "sample/codex-agent-workflow")
+        items = briefing.all_content_items([], [], [hot_generic, agent_tool])
+        briefing.generate_x_topics(items)
+        self.assertTrue(all("rion_score" not in item for item in items))
 
     def test_highlights_keep_source_diversity(self):
         briefing = DailyBriefing(dry_run=True)
@@ -358,16 +322,6 @@ class DailyBriefingTests(unittest.TestCase):
                     "score": 60,
                 },
                 {
-                    "section": "web3",
-                    "section_name": "Web3 热点",
-                    "display_title": "Bitcoin market update",
-                    "url": "https://example.com/web3",
-                    "category": "市场动态",
-                    "tags": ["Web3"],
-                    "summary_cn": "Web3 市场信号变化。",
-                    "score": 59,
-                },
-                {
                     "section": "venture",
                     "section_name": "投资 & 经济",
                     "display_title": "AI startup funding",
@@ -383,9 +337,8 @@ class DailyBriefingTests(unittest.TestCase):
         highlights = briefing.generate_highlights(items)
         sections = [item["section"] for item in highlights]
 
-        self.assertLessEqual(sections.count("GitHub 优质项目"), 2)
+        self.assertGreaterEqual(sections.count("GitHub 优质项目"), 1)
         self.assertIn("AI 热点", sections)
-        self.assertIn("Web3 热点", sections)
         self.assertIn("投资 & 经济", sections)
 
     def test_project_tags_avoid_common_false_positives(self):
@@ -411,7 +364,7 @@ class DailyBriefingTests(unittest.TestCase):
                     "today_stars": "100 stars today",
                     "url": "https://github.com/JuliusBrussee/caveman",
                 },
-                "Web3",
+                "监管",
             ),
             (
                 {
@@ -431,8 +384,10 @@ class DailyBriefingTests(unittest.TestCase):
                 briefing._enrich_project_item(project)
                 self.assertNotIn(bad_tag, project["tags"])
 
-    def test_x_topics_keep_ai_web3_and_venture_sources(self):
+    def test_x_topics_keep_ai_and_venture_sources(self):
         briefing = DailyBriefing(dry_run=True)
+        briefing.config["editorial"]["raw_candidates"] = False
+        briefing.config["limits"]["x_topics"] = 5
         items = [
             {
                 "section": "github",
@@ -459,16 +414,6 @@ class DailyBriefingTests(unittest.TestCase):
                     "score": 60,
                 },
                 {
-                    "section": "web3",
-                    "section_name": "Web3 热点",
-                    "display_title": "UK crypto rules",
-                    "url": "https://example.com/web3",
-                    "category": "政策监管",
-                    "tags": ["Web3", "监管"],
-                    "summary_cn": "监管正在改变市场预期。",
-                    "score": 59,
-                },
-                {
                     "section": "venture",
                     "section_name": "投资 & 经济",
                     "display_title": "AI startup funding",
@@ -485,7 +430,6 @@ class DailyBriefingTests(unittest.TestCase):
         sources = {topic["source"] for topic in topics}
 
         self.assertIn("Mistral model update", sources)
-        self.assertIn("UK crypto rules", sources)
         self.assertIn("AI startup funding", sources)
 
     def test_mistral_summary_is_not_overridden_by_openai_competitor_phrase(self):
@@ -499,7 +443,7 @@ class DailyBriefingTests(unittest.TestCase):
 
         self.assertIn("Mistral", item["summary_cn"])
         self.assertIn("Mistral", item["tags"])
-        self.assertIn("模型公司格局", item["rion_reason"])
+        self.assertNotIn("rion_reason", item)
 
     def test_regulation_tag_avoids_plain_rules_false_positive(self):
         briefing = DailyBriefing(dry_run=True)
@@ -533,7 +477,7 @@ class DailyBriefingTests(unittest.TestCase):
         data = self.generate_quietly(briefing)
         items = [
             item
-            for section in ["ai_news", "web3_news", "venture_news", "github_projects"]
+            for section in ["ai_news", "venture_news", "github_projects"]
             for item in data["sections"][section]
         ]
 
@@ -546,9 +490,9 @@ class DailyBriefingTests(unittest.TestCase):
         self.assertNotIn("摘要：", text)
         self.assertNotIn("一句话介绍：", markdown)
         self.assertNotIn("一句话介绍：", text)
-        for item in items:
-            self.assertIn(item["summary_cn"], markdown)
-            self.assertIn(item["summary_cn"], text)
+        for item in data["sections"]["editorial_queue"]:
+            self.assertIn(item["raw_summary"], markdown)
+            self.assertIn(item["raw_summary"], text)
 
     def test_markdown_puts_specific_summary_immediately_after_news_title(self):
         briefing = DailyBriefing(dry_run=True)
@@ -584,7 +528,6 @@ class DailyBriefingTests(unittest.TestCase):
             config_path.write_text(
                 "limits:\n"
                 "  ai_news: 1\n"
-                "  web3_news: 1\n"
                 "  venture_news: 1\n"
                 "  github_projects: 1\n"
                 "  topics: 2\n",
@@ -722,6 +665,31 @@ class DailyBriefingTests(unittest.TestCase):
             <= product_pages
         )
 
+        feed_names = {
+            row["name"] for row in briefing.config["sources"]["industry_feeds"]
+        }
+        self.assertTrue(
+            {"NVIDIA Newsroom", "AMD Press Releases", "MLCommons", "SemiAnalysis"}
+            <= feed_names
+        )
+        model_pages = {
+            row["name"] for row in briefing.official_model_page_watchlist()
+        }
+        self.assertTrue(
+            {
+                "OpenAI API Changelog",
+                "Claude Platform Release Notes",
+                "Meta AI Blog",
+                "Alibaba Model Studio Release Notes",
+                "Volcano Ark Announcements",
+                "Tencent Hunyuan Product Updates",
+                "Baidu Qianfan Updates",
+            }
+            <= model_pages
+        )
+        self.assertNotIn("personalization", briefing.config)
+        self.assertNotIn("web3_news", briefing.config["sources"])
+
     def test_official_source_config_has_no_duplicates_or_known_unofficial_accounts(self):
         briefing = DailyBriefing(dry_run=True)
         sources = briefing.config["sources"]
@@ -840,12 +808,12 @@ class DailyBriefingTests(unittest.TestCase):
         self.assertEqual(len(briefing.generate_product_updates([item])), 1)
         self.assertEqual(len(briefing.generate_viral_ai_news([item])), 1)
 
-    def test_product_updates_exclude_web3_items(self):
+    def test_product_updates_exclude_non_ai_crypto_items(self):
         briefing = DailyBriefing(dry_run=True)
         item = {
-            "title": "Web3 wallet launches an AI trading workflow",
+            "title": "Crypto wallet launches a trading workflow",
             "summary": "The product adds an AI assistant and API.",
-            "section": "web3",
+            "section": "venture",
         }
 
         self.assertEqual(briefing.generate_product_updates([item]), [])
@@ -992,6 +960,7 @@ class DailyBriefingTests(unittest.TestCase):
 
     def test_industry_feed_filters_corporate_culture_news(self):
         briefing = DailyBriefing(dry_run=False, history_enabled=False)
+        briefing.config["editorial"]["raw_candidates"] = False
         briefing._get_content = lambda url: b"feed"
         briefing._parse_feed_articles = lambda content, source, limit: [
             {
@@ -1107,6 +1076,7 @@ class DailyBriefingTests(unittest.TestCase):
             focus="医疗",
             lookback_hours=48,
         )
+        briefing.config["editorial"]["raw_candidates"] = False
         recent = datetime.now(timezone.utc).isoformat()
         matching = {
             "title": "Medical AI product update launches a clinical workflow",
@@ -1253,7 +1223,7 @@ class DailyBriefingTests(unittest.TestCase):
             "summary": "A venture capital fundraising story.",
         }
 
-        sections = briefing._dedupe_news_sections([ai_item], [], [venture_item])
+        sections = briefing._dedupe_news_sections([ai_item], [venture_item])
 
         self.assertEqual(sections["ai"], [])
         self.assertEqual(len(sections["venture"]), 1)
@@ -1290,20 +1260,23 @@ class DailyBriefingTests(unittest.TestCase):
             self.assertEqual(path.suffix, ".html")
             self.assertEqual(path.read_text(encoding="utf-8"), "<!doctype html>")
 
-    def test_x_drafts_cover_three_content_shapes(self):
+    def test_industry_profile_keeps_creator_sections_disabled(self):
         briefing = DailyBriefing(dry_run=True)
+        briefing.config["editorial"]["raw_candidates"] = False
+        briefing.config["limits"]["x_topics"] = 5
+        briefing.config["limits"]["x_drafts"] = 3
         data = self.generate_quietly(briefing)
 
         formats = [draft["format"] for draft in data["sections"]["x_drafts"]]
 
-        self.assertEqual(formats, ["单帖", "thread", "视觉/视频脚本"])
+        self.assertEqual(formats, [])
 
     def test_source_tiers_distinguish_official_multi_and_aggregated(self):
         briefing = DailyBriefing(dry_run=True)
         official = briefing._source_profile({"source": "OpenAI"})
         multi = briefing._source_profile(
             {
-                "source": "TechCrunch / CoinDesk",
+                "source": "TechCrunch / Reuters",
                 "related_links": [],
             }
         )
@@ -1425,15 +1398,10 @@ class DailyBriefingTests(unittest.TestCase):
         self.assertGreaterEqual(len(queue), 1)
         self.assertTrue(queue[0]["url"].startswith("http"))
         self.assertIn("raw_summary", queue[0])
-        self.assertIn("editorial_hint", queue[0])
-        self.assertIn("credibility_score", queue[0])
-        self.assertEqual(
-            {item["section_key"] for item in queue},
-            {"ai", "venture", "github"},
-        )
-        self.assertTrue(
-            any(item.get("signal_type") == "model_release" for item in queue)
-        )
+        self.assertEqual(queue[0]["editorial_status"], "pending")
+        self.assertNotIn("editorial_hint", queue[0])
+        self.assertTrue(all("source" in item for item in queue))
+        self.assertTrue(all(item["raw_summary"] for item in queue))
 
     def test_feedback_updates_future_ranking_with_bounded_adjustment(self):
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -1446,7 +1414,6 @@ class DailyBriefingTests(unittest.TestCase):
                 "source": "Agent Source",
                 "category": "Agent / AI 编码",
                 "tags": ["Agent"],
-                "matched_signals": ["Agent / AI 编码"],
                 "overall_score": 80,
                 "source_count": 1,
             }
@@ -1462,7 +1429,6 @@ class DailyBriefingTests(unittest.TestCase):
                 "source": "Agent Source",
                 "category": "Agent / AI 编码",
                 "overall_score": 70,
-                "rion_score": 70,
             }
             store.apply_feedback([future_item])
 
@@ -1491,7 +1457,6 @@ class DailyBriefingTests(unittest.TestCase):
                 created_at="2026-08-02T08:00:00+00:00",
             )
             candidate = dict(item)
-            candidate["rion_score"] = 72
             store.apply_feedback([candidate])
 
             self.assertLess(candidate["overall_score"], 72)

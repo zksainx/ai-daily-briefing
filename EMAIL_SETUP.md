@@ -4,11 +4,11 @@
 
 ## 工作流
 
-1. 定时任务采集最多 80 条原始候选，由 Agent 阅读、核验并选出最多 10 条，生成并校验 `briefing_YYYY-MM-DD.md`。
-2. Markdown 是唯一持久化的日报内容文件；直接在内存中生成邮件 HTML 和纯文本正文，不生成独立网页 HTML。
+1. 定时任务永久保存最多 80 条原始候选；第一阶段只选 30 条短名单，第二阶段核验短名单并生成最多 10 条的 `briefing_YYYY-MM-DD.md`。
+2. 候选包、短名单、核验进度和草稿保存在本机状态目录以便断点恢复；Markdown 仍是唯一对外发布的日报内容文件。邮件 HTML 和纯文本正文在内存中生成，不保存独立网页 HTML。
 3. 报告文件发布成功后，向收件人逐封发送，地址不会相互暴露。
 4. 每个“报告日期 + 收件地址”成功后立即写入本地发送账本；任务重试只补发尚未成功的地址。
-5. 邮件失败保留已生成的 MD；重试复用 MD，无需重新采集和选稿。
+5. 采集、选 30、核验写稿和邮件阶段各自保存进度；失败后按 10、30、60 分钟补跑，邮件重试复用 MD，无需重新采集和选稿。
 
 ## 收件人
 
@@ -70,6 +70,6 @@ security add-generic-password -U \
 
 日报编辑通过 `codex exec --model gpt-5.6-sol -c 'model_reasoning_effort="high"'` 固定模型和推理强度，不随全局默认模型变化。
 
-`scripts/scheduled_briefing.py` 已在日报发布后调用邮件发送器。未启用邮件时发送器会安全退出；启用后，发送失败会让任务日志出现错误，下一次运行可依据发送账本补发。
+`scripts/scheduled_briefing.py` 已在日报发布后调用邮件发送器。启动时会从 2026-09-18 起检查缺失日期，并优先补做最早的未完成日报。运行状态位于 `~/Library/Application Support/ai-daily-briefing/runs/YYYY-MM-DD/`，候选包不会再放入临时目录。
 
-LaunchAgent `com.kxzhang.ai-briefing-email-daily` 每天北京时间 00:00 运行，生成上一自然日的 MD，并直接发送邮件。它长期生效，没有结束日期。
+LaunchAgent `com.kxzhang.ai-briefing-email-daily` 每天北京时间 00:00 运行，并每 1 小时执行一次轻量恢复检查。没有缺失任务时检查会立即退出；发生失败时会在状态文件允许重试后的下一次小时检查中补跑。它长期生效，没有结束日期。

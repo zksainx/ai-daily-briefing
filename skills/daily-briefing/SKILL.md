@@ -22,6 +22,14 @@ With `editorial.raw_candidates: true`, do not apply topical keyword exclusions o
 5. If fewer than 10 recent, well-supported events remain, publish fewer items and state the shortfall. Never fill the list with stale or low-signal content.
 6. Do not use a personal profile, named-person preference, or legacy personalization score. Judge the fixed candidate pool on industry significance, timeliness, source credibility, technical substance, and source diversity; Codex is the final editor.
 
+### Freshness and cross-day deduplication
+
+- The scheduled candidate pool is restricted to the 48 hours ending at the report-date cutoff; items without a usable publication date are not eligible for the scheduled pool.
+- Prefer events published on the report date itself.
+- Read the previous sent Markdown report before selecting Top 10. Exclude previously sent events by default.
+- A repeated event is allowed only when the source shows a new version, new availability, a new benchmark result, or a material new development. A new URL or rewritten headline alone is not new progress.
+- Never include an event older than 48 hours in the scheduled report.
+
 ## Generate Today's Briefing
 
 1. Run the bundled helper to fetch, normalize, and deduplicate the source pool:

@@ -70,6 +70,43 @@ class ScheduledBriefingTests(unittest.TestCase):
             )
             self.assertFalse(runner.selection_is_valid(selection, packet))
 
+    def test_selection_prompt_requires_prior_day_change_for_repeats(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            directory = Path(tmpdir)
+            packet = directory / "candidates.json"
+            packet.write_text(
+                json.dumps(
+                    {
+                        "report_date": "2026-09-19",
+                        "candidates": [
+                            {"candidate_id": value, "title": str(value)}
+                            for value in range(1, 41)
+                        ],
+                    }
+                ),
+                encoding="utf-8",
+            )
+            previous = runner.OUTPUT_ROOT
+            try:
+                with patch.object(runner, "OUTPUT_ROOT", directory):
+                    (directory / "briefing_2026-09-18.md").write_text(
+                        "# previous\n", encoding="utf-8"
+                    )
+                    with patch.object(runner, "run_codex") as run_codex:
+                        def fake_run(command, prompt, log, timeout):
+                            response = directory / "selection-response.json"
+                            response.write_text(
+                                json.dumps({"selected_candidate_ids": list(range(1, 31))}),
+                                encoding="utf-8",
+                            )
+                        run_codex.side_effect = fake_run
+                        runner.run_selection("2026-09-19", directory, 1)
+                        prompt = run_codex.call_args.args[1]
+            finally:
+                runner.OUTPUT_ROOT = previous
+        self.assertIn("Prior-day items are excluded by default", prompt)
+        self.assertIn("new version, new availability", prompt)
+
     def test_persistent_artifacts_allow_resume_without_recollection(self):
         day = "2026-09-18"
         now = datetime(2026, 9, 19, 2, 0, tzinfo=runner.TIMEZONE)

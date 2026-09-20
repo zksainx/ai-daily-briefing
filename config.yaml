@@ -55,7 +55,7 @@ sources:
       discovery_only: true
       role: "analysis"
       priority: "high"
-      max_age_days: 21
+      max_age_days: 2
       allow_ai_infrastructure_signals: true
     - {name: "Cloudflare Blog", url: "https://blog.cloudflare.com/rss/", track: "infrastructure", country: "US", layer_hint: "midstream", authority: "official"}
     - {name: "Product Hunt", url: "https://www.producthunt.com/feed", track: "applications", country: "GLOBAL", layer_hint: "downstream", authority: "community", discovery_only: true}
@@ -84,7 +84,7 @@ sources:
   hacker_news:
     url: "https://hn.algolia.com/api/v1/search"
     queries: ["AI agent", "LLM", "OpenAI", "Claude"]
-    lookback_hours: 96
+    lookback_hours: 48
     min_points: 20
   arxiv:
     url: "https://export.arxiv.org/api/query"
@@ -362,10 +362,10 @@ request:
   timeout: 10
   user_agent: "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Safari/537.36"
 
-# 内容质量控制：限制过旧官方更新，并合并同一事件的重复报道。
+# 内容质量控制：定时日报只采集报告截止前 48 小时，并合并同一事件的重复报道。
 quality:
-  max_feed_age_days: 10
-  model_release_max_age_days: 14
+  max_feed_age_days: 2
+  model_release_max_age_days: 2
   official_x_lookback_hours: 48
   funding_min_source_count: 2
   similarity_threshold: 0.76

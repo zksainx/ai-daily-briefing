@@ -201,7 +201,7 @@ DEFAULT_CONFIG: Dict[str, Any] = {
         "hacker_news": {
             "url": "https://hn.algolia.com/api/v1/search",
             "queries": ["AI agent", "LLM", "OpenAI", "Claude"],
-            "lookback_hours": 96,
+            "lookback_hours": 48,
             "min_points": 20,
         },
         "arxiv": {
@@ -462,8 +462,8 @@ DEFAULT_CONFIG: Dict[str, Any] = {
         ),
     },
     "quality": {
-        "max_feed_age_days": 10,
-        "model_release_max_age_days": 14,
+        "max_feed_age_days": 2,
+        "model_release_max_age_days": 2,
         "official_x_lookback_hours": 48,
         "funding_min_source_count": 2,
         "similarity_threshold": 0.76,
@@ -4782,7 +4782,7 @@ class DailyBriefing:
                 "editorial_instructions": [
                     "原始候选不按关键词筛选。编辑须逐条阅读全部候选，在内部判断其与用户关注方向的相关性、事实依据、时效和产业影响，再选出最多十条。这里的判断/投票由当前编辑 Agent 完成，不代表多个独立模型投票；入选或不入选理由只保留在临时推理记录，不写入最终 Top 10。原始抓取包不等于最终简报；focus 和 mode 的语义边界由编辑执行。",
                     "只保留能核验的事实和原始链接，不补写来源中没有的数字。",
-                    "先阅读 sections.editorial_queue 中最多 80 条候选，再由编辑 Agent 独立选择最终十条；不得直接照搬 sections.highlights 的规则排序。优先实质发布、生产部署、产业影响和跨层代表性，压低奖项、营销稿、重复版本和泛案例文章。",
+                    "先阅读 sections.editorial_queue 中最多 80 条候选，再由编辑 Agent 独立选择最终十条；不得直接照搬 sections.highlights 的规则排序。定时日报候选池只包含报告截止前 48 小时且有明确发布日期的内容，优先当天发布；前一天已经发送过的事件默认排除，只有新版本、新可用性、新基准或重大进展才允许重复。优先实质发布、生产部署、产业影响和跨层代表性，压低奖项、营销稿、重复版本和泛案例文章。",
                     "最终十条不足时如实少报，不用旧闻、低可信媒体转述或无实质变化的内容填充数量。",
                     "当前简报聚焦 AI 工业界：不把 arXiv、论文、学术会议或纯理论研究编入成品；模型、产品、基础设施和商业事件优先引用公司公告、模型卡、Changelog、Release 或可核验披露。",
                     "优先选择新变化、多源印证、官方更新和可转成内容或商业动作的信号。",

@@ -35,3 +35,12 @@ class RawCandidateTests(unittest.TestCase):
         self.assertTrue(self.briefing._matches_request({"title": "Electricity supply"}))
         self.briefing.lookback_hours = 24
         self.assertFalse(self.briefing._matches_request({"title": "Electricity supply", "published_at": "2000-01-01T00:00:00Z"}))
+
+    def test_default_collection_window_is_48_hours(self):
+        self.assertEqual(self.briefing.config["quality"]["max_feed_age_days"], 2)
+        self.assertEqual(
+            self.briefing.config["quality"]["model_release_max_age_days"], 2
+        )
+        self.assertEqual(
+            self.briefing.config["sources"]["hacker_news"]["lookback_hours"], 48
+        )

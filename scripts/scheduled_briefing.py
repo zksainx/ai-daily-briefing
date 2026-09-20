@@ -4,7 +4,8 @@
 from __future__ import annotations
 
 import argparse
-from datetime import date, datetime, time, timedelta
+from datetime import date, datetime, time, timedelta, timezone
+from email.utils import parsedate_to_datetime
 import fcntl
 import json
 import os
@@ -215,7 +216,34 @@ def collect_candidates(day: str, destination: Path) -> None:
         config_path=str(ROOT / "config.yaml"), history_enabled=False
     )
     data = briefing.generate_data()
-    rows = data.get("sections", {}).get("editorial_queue", [])[:MAX_CANDIDATES]
+    cutoff = datetime.combine(
+        date.fromisoformat(day) + timedelta(days=1), time.min, TIMEZONE
+    )
+    window_start = cutoff - timedelta(hours=48)
+
+    def parse_datetime(value: str) -> datetime | None:
+        value = str(value or "").strip()
+        if not value:
+            return None
+        try:
+            parsed = parsedate_to_datetime(value)
+        except (TypeError, ValueError, OverflowError):
+            try:
+                parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+            except ValueError:
+                return None
+        if parsed.tzinfo is None:
+            parsed = parsed.replace(tzinfo=timezone.utc)
+        return parsed.astimezone(TIMEZONE)
+
+    rows = []
+    for row in data.get("sections", {}).get("editorial_queue", []):
+        published = parse_datetime(row.get("published_at") or row.get("time"))
+        if published is None or not (window_start <= published < cutoff):
+            continue
+        rows.append(row)
+        if len(rows) >= MAX_CANDIDATES:
+            break
     if not rows:
         raise RuntimeError("No candidates; refusing to publish an empty report")
     candidates = []
@@ -226,9 +254,8 @@ def collect_candidates(day: str, destination: Path) -> None:
     packet = {
         "report_date": day,
         "timezone": "Asia/Shanghai",
-        "cutoff_at": datetime.combine(
-            date.fromisoformat(day) + timedelta(days=1), time.min, TIMEZONE
-        ).isoformat(),
+        "window_start": window_start.isoformat(),
+        "cutoff_at": cutoff.isoformat(),
         "collected_at": datetime.now(TIMEZONE).isoformat(timespec="seconds"),
         "candidate_count": len(candidates),
         "candidates": candidates,
@@ -346,9 +373,18 @@ def run_selection(day: str, directory: Path, attempt: int) -> None:
             "additionalProperties": False,
         },
     )
+    previous_day = (date.fromisoformat(day) - timedelta(days=1)).isoformat()
+    previous_report = OUTPUT_ROOT / f"briefing_{previous_day}.md"
+    previous_context = (
+        f"The previous sent report is at {previous_report}; read it and treat its items as already sent."
+        if previous_report.is_file()
+        else "There is no previous sent report to compare against."
+    )
     prompt = f"""You are stage 1 of an AI industry daily briefing pipeline.
-Read the fixed candidate packet at {packet}. It contains at most 80 already collected candidates for report date {day}.
+Read the fixed candidate packet at {packet}. It contains at most 80 candidates for report date {day}; the packet window is explicitly limited to the 48 hours ending at the report cutoff.
+{previous_context}
 Select exactly {target} candidate IDs for a verification shortlist. Judge editorially; do not use keyword scoring and do not browse the web. Cover consequential company releases and changes across foundation models, multimodal, world models, embodied AI, agents, developer products, chips, data centers, cloud/inference infrastructure, adoption, and major commercial events. Exclude academic papers and purely academic research. Prefer recent, concrete and non-duplicate events from credible sources, including strong industry media and analysis such as SemiAnalysis, not only company homepages.
+Prior-day items are excluded by default. Re-select an item only when the candidate clearly represents a new version, new availability, a new benchmark result, or a material new development after the prior report. Different URLs or different wording for the same event do not count as new progress.
 Exclude cryptocurrency and blockchain stories even when they mention AI. Do not use a personal profile, named-person preference, legacy personalization score, or feedback-derived preference adjustment. Judge industry significance, timeliness, source credibility, technical substance, and source diversity directly.
 Return only the requested JSON containing selected_candidate_ids. Do not write per-candidate inclusion/exclusion reasons and do not write the final briefing."""
     command = codex_base_command(writable_dir=directory, web=False) + [
@@ -449,12 +485,20 @@ def run_verification(day: str, directory: Path, attempt: int) -> None:
     draft = directory / f"briefing_{day}.draft.md"
     initialize_verification_progress(day, shortlist, progress)
     shortlist_count = len(read_json(shortlist, {}).get("candidates", []))
+    previous_day = (date.fromisoformat(day) - timedelta(days=1)).isoformat()
+    previous_report = OUTPUT_ROOT / f"briefing_{previous_day}.md"
+    previous_context = (
+        f"The previous sent report is at {previous_report}; compare every shortlisted event against it."
+        if previous_report.is_file()
+        else "There is no previous sent report to compare against."
+    )
     prompt = f"""You are stage 2 of a recoverable AI industry daily briefing pipeline.
-Report date: {day} in Asia/Shanghai; the cutoff is the following midnight. Read only the {shortlist_count}-candidate shortlist at {shortlist}. The persistent verification state is {progress}, and the persistent Markdown draft is {draft}.
+Report date: {day} in Asia/Shanghai; the candidate window is the 48 hours ending at the following midnight. Read only the {shortlist_count}-candidate shortlist at {shortlist}. The persistent verification state is {progress}, and the persistent Markdown draft is {draft}.
+{previous_context}
 
 Resume from the existing progress and draft when present. Open original sources for shortlisted candidates, verify facts and actual publication dates (not sitemap modification dates), and reject anything after the cutoff. Use other credible pages only to corroborate shortlisted events; every final item must correspond to a shortlist candidate. Update {progress} in small batches while working, preserving checked_candidate_ids and concise factual notes so a later retry can continue. Do not write long selection rationales.
 
-Choose up to 10 of the strongest verified AI INDUSTRY stories across models, multimodal, world models, embodied AI, products, agents, infrastructure, adoption and commercialization. Do not include academic papers or purely academic research. Write the complete final Chinese Markdown to {draft}, beginning with `# AI 工业界前沿简报 · {day}`. Under `## 本日十条行业信号`, every item must use this exact structure, including the three-space indentation:
+Choose up to 10 of the strongest verified AI INDUSTRY stories across models, multimodal, world models, embodied AI, products, agents, infrastructure, adoption and commercialization. Prior-day items are excluded by default. Allow a repeated event only if the verified source shows a new version, new availability, a new benchmark result, or a material new development after the previous report; a new URL or rewritten headline alone is insufficient. Do not include academic papers or purely academic research. Write the complete final Chinese Markdown to {draft}, beginning with `# AI 工业界前沿简报 · {day}`. Under `## 本日十条行业信号`, every item must use this exact structure, including the three-space indentation:
 Exclude cryptocurrency and blockchain stories even when they mention AI. Do not use a personal profile, named-person preference, legacy personalization score, or feedback-derived preference adjustment.
 
 1. [标题](原始链接)

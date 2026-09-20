@@ -95,6 +95,7 @@ If a Skill with the same name already exists, explicitly back it up and replace 
 - Opening sections for changes since yesterday, the AI industry chain, cross-layer connections, model releases, product updates, application trends, AI funding and commercialization, potentially viral stories, must-read items, X opportunities, B2B opportunities, and watchlist signals
 - Final Top 10 selection by Codex based on industry significance, timeliness, source credibility, technical substance, and source diversity, without personal-profile scoring
 - Confidence labels: `Officially confirmed`, `Corroborated by multiple sources`, and `Single-source signal`
+- Scheduled freshness: collect only the 48 hours ending at the report cutoff, prefer same-day events, and exclude prior-day sent events unless there is a new version, availability change, benchmark result, or material development
 - X drafts in three formats: single post, thread, and visual/video script
 - SQLite history for first seen, last seen, repeat count, source count, and daily ranking; repeated runs on the same day do not double-count
 - Feedback actions for opened, saved, drafted, published, or dismissed items, allowing future ranking to learn from real choices

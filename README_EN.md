@@ -131,15 +131,18 @@ Capital is not a fourth industry layer. A downstream AI workflow company remains
 | Audio and music models | ElevenLabs and Suno | `@ElevenLabs`, `@suno_ai_` |
 | Model platforms and ecosystem | Hugging Face, OpenRouter, Together AI, Snowflake Cortex, and Salesforce AI | `@huggingface`, `@OpenRouter`, `@togethercompute`, `@SnowflakeDB`, `@SalesforceDevs` |
 
-Vendor pages, changelogs, and model cards confirm facts. X is the fast layer for launches, previews, API or pricing notices, and product updates. Without X API credentials, Codex searches the configured account watchlist during the editorial pass.
+Vendor pages, changelogs, and model cards confirm facts. X is the fast layer for launches, previews, API or pricing notices, and product updates. Interactive full-packet editing can search the configured watchlist without API credentials. The recoverable two-stage scheduled email pipeline requires a Bearer Token for reliable X collection.
 
-To let local Python fetch official-account posts automatically, optionally set:
+To let local Python and the LaunchAgent fetch official-account posts automatically, store the Bearer Token in macOS Keychain. This command prompts for the token securely in Terminal:
 
 ```bash
-export X_BEARER_TOKEN="your X API bearer token"
+security add-generic-password -U \
+  -a "x-api" \
+  -s "ai-daily-briefing-x-bearer" \
+  -w
 ```
 
-Never place the token in `config.yaml` or commit it to Git.
+The program reads this Keychain item automatically. Never place the token in `config.yaml`, the LaunchAgent plist, or Git. `X_BEARER_TOKEN` remains available for temporary testing and takes precedence over Keychain.
 
 ## Quick Start
 
@@ -306,19 +309,18 @@ output:
   language: "zh"
   output_dir: "outputs"
 
-limits:
-  ai_news: 10
-  ai_official_per_source: 3
-  official_model_releases_per_org: 2
+collection:
+  general_feed_per_source: 4
+  industry_feed_per_source: 4
+  official_model_per_org: 2
   model_changelog_per_source: 3
-  model_releases: 8
-  industry_chain_per_layer: 3
-  application_trends: 6
-  ai_funding: 6
-  cross_layer_connections: 3
-  venture_news: 5
-  github_projects: 10
-  topics: 5
+  official_x_candidates: 8
+  official_x_api_results_per_request: 10
+
+pipeline:
+  candidate_pool_max: 80
+  shortlist_size: 30
+  final_report_max: 10
 
 quality:
   max_feed_age_days: 10

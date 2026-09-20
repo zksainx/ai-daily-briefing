@@ -22,7 +22,7 @@ class RawCandidateTests(unittest.TestCase):
         self.assertNotIn("score", queue[0])
 
     def test_queue_uses_source_rotation_and_dates_instead_of_scores(self):
-        self.briefing.config["limits"]["editorial_queue"] = 2
+        self.briefing.config["pipeline"]["candidate_pool_max"] = 2
         rows = [
             {"title": "Old", "source": "A", "published_at": "2026-09-11", "overall_score": 100},
             {"title": "New", "source": "A", "published_at": "2026-09-13", "overall_score": 1},

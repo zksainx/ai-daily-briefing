@@ -9,7 +9,6 @@ editorial:
   include_community_sources: false
   include_capital_signals: true
   primary_source_required: true
-  daily_top_n: 10
   scope:
     - "基础模型与能力发布：LLM、推理、多模态、视频、音频、世界模型、具身智能"
     - "产品与开发平台：Agent、AI 编程、模型 API、企业平台与重要功能更新"
@@ -40,7 +39,17 @@ sources:
     - {name: "AWS Machine Learning Blog", url: "https://aws.amazon.com/blogs/machine-learning/feed/", track: "infrastructure", country: "US", layer_hint: "upstream", authority: "official"}
     - {name: "Google Cloud AI", url: "https://cloudblog.withgoogle.com/products/ai-machine-learning/rss/", track: "infrastructure", country: "US", layer_hint: "midstream", authority: "official"}
     # 媒体只承担召回和交叉核验，不与公司公告混为同一证据等级。
-    - {name: "量子位", url: "https://www.qbitai.com/feed", track: "applications", country: "CN", layer_hint: "downstream", authority: "media", discovery_only: true}
+    - name: "量子位"
+      url: "https://www.qbitai.com/feed"
+      fallback_urls:
+        - "https://www.qbitai.com/rss"
+        - "https://www.qbitai.com/category/%E8%B5%84%E8%AE%AF/feed"
+      retries_per_url: 2
+      track: "applications"
+      country: "CN"
+      layer_hint: "downstream"
+      authority: "media"
+      discovery_only: true
     - {name: "The Decoder", url: "https://the-decoder.com/feed/", track: "applications", country: "EU", layer_hint: "midstream", authority: "media", discovery_only: true}
     - {name: "Ars Technica Technology Lab", url: "https://feeds.arstechnica.com/arstechnica/technology-lab", track: "infrastructure", country: "US", layer_hint: "midstream", authority: "media", discovery_only: true}
     - {name: "MIT Technology Review", url: "https://www.technologyreview.com/feed/", track: "applications", country: "US", layer_hint: "midstream", authority: "media", discovery_only: true}
@@ -320,41 +329,24 @@ output:
   language: "zh"  # zh, en
   output_dir: "outputs"
   
-# 数量限制
-limits:
-  ai_news: 10
-  ai_official_per_source: 3
-  venture_news: 3
-  github_projects: 4
-  topics: 0
-  highlights: 10
-  x_topics: 0
-  x_drafts: 0
-  hacker_news: 5
-  arxiv: 0
-  huggingface_models: 0
-  official_model_releases_per_org: 2
-  model_changelog_per_source: 3
-  model_releases: 8
-  product_updates: 8
-  viral_ai_news: 8
-  industry_chain_per_layer: 3
-  application_trends: 6
-  ai_funding: 6
+# 采集阶段只做单源/API安全限流，不对模型、产品、融资等内容类别分配名额。
+collection:
+  general_feed_per_source: 4
+  venture_page_max: 4
+  github_trending_max: 4
   industry_feed_per_source: 4
-  industry_signals: 40
-  cross_layer_connections: 3
-  official_x_updates: 12
-  official_social_updates: 8
-  aihot: 5
-  official_sitemaps_per_source: 3
-  github_releases_per_repo: 1
-  ecosystem_signals: 18
-  changes: 5
-  business_opportunities: 5
-  watchlist: 5
-  # 给编辑/Agent 复核的候选池；最终十条由语义判断选择，不直接照分数截断。
-  editorial_queue: 80
+  official_model_per_org: 2
+  model_changelog_per_source: 3
+  official_x_candidates: 8
+  official_x_api_results_per_request: 10
+  official_sitemap_per_source: 3
+  github_release_per_repo: 1
+
+# 唯一的整体筛选漏斗：汇总候选 -> 短名单 -> 最终日报。
+pipeline:
+  candidate_pool_max: 80
+  shortlist_size: 30
+  final_report_max: 10
 
 # 网络请求配置
 request:
@@ -366,7 +358,7 @@ request:
 quality:
   max_feed_age_days: 2
   model_release_max_age_days: 2
-  official_x_lookback_hours: 48
+  official_x_lookback_hours: 24
   funding_min_source_count: 2
   similarity_threshold: 0.76
   min_similarity_tokens: 4

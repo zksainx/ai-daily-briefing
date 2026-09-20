@@ -128,11 +128,15 @@ output:
   format: "markdown"
   output_dir: "outputs"
 
-limits:
-  ai_news: 10
-  venture_news: 5
-  github_projects: 10
-  topics: 5
+collection:
+  general_feed_per_source: 4
+  industry_feed_per_source: 4
+  official_x_candidates: 8
+
+pipeline:
+  candidate_pool_max: 80
+  shortlist_size: 30
+  final_report_max: 10
 ```
 
 ## 常见问题

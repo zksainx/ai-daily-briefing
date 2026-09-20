@@ -13,6 +13,7 @@ import argparse
 import json
 import os
 import re
+import subprocess
 import sys
 from concurrent.futures import ThreadPoolExecutor
 from copy import deepcopy
@@ -422,15 +423,15 @@ DEFAULT_CONFIG: Dict[str, Any] = {
     "limits": {
         "ai_news": 10,
         "ai_official_per_source": 3,
-        "venture_news": 5,
-        "github_projects": 10,
-        "topics": 5,
-        "highlights": 5,
-        "x_topics": 5,
-        "x_drafts": 3,
+        "venture_news": 3,
+        "github_projects": 4,
+        "topics": 0,
+        "highlights": 10,
+        "x_topics": 0,
+        "x_drafts": 0,
         "hacker_news": 5,
-        "arxiv": 4,
-        "huggingface_models": 4,
+        "arxiv": 0,
+        "huggingface_models": 0,
         "official_model_releases_per_org": 2,
         "model_changelog_per_source": 3,
         "model_releases": 8,
@@ -440,9 +441,9 @@ DEFAULT_CONFIG: Dict[str, Any] = {
         "application_trends": 6,
         "ai_funding": 6,
         "industry_feed_per_source": 4,
-        "industry_signals": 24,
+        "industry_signals": 40,
         "cross_layer_connections": 3,
-        "official_x_updates": 12,
+        "official_x_updates": 8,
         "official_social_updates": 8,
         "aihot": 5,
         "official_sitemaps_per_source": 3,
@@ -452,6 +453,26 @@ DEFAULT_CONFIG: Dict[str, Any] = {
         "business_opportunities": 5,
         "watchlist": 5,
         "editorial_queue": 80,
+    },
+    # The industry briefing uses only source-level safety caps plus one global
+    # 80 -> 30 -> 10 editorial funnel. The legacy limits above remain available
+    # for the repository's non-industry compatibility views.
+    "collection": {
+        "general_feed_per_source": 4,
+        "venture_page_max": 4,
+        "github_trending_max": 4,
+        "industry_feed_per_source": 4,
+        "official_model_per_org": 2,
+        "model_changelog_per_source": 3,
+        "official_x_candidates": 8,
+        "official_x_api_results_per_request": 10,
+        "official_sitemap_per_source": 3,
+        "github_release_per_repo": 1,
+    },
+    "pipeline": {
+        "candidate_pool_max": 80,
+        "shortlist_size": 30,
+        "final_report_max": 10,
     },
     "request": {
         "timeout": 25,
@@ -464,7 +485,8 @@ DEFAULT_CONFIG: Dict[str, Any] = {
     "quality": {
         "max_feed_age_days": 2,
         "model_release_max_age_days": 2,
-        "official_x_lookback_hours": 48,
+        "official_x_lookback_hours": 24,
+        "official_x_max_results_per_request": 10,
         "funding_min_source_count": 2,
         "similarity_threshold": 0.76,
         "min_similarity_tokens": 4,
@@ -771,6 +793,7 @@ class DailyBriefing:
         self.session.headers.update(
             {"User-Agent": self.config["request"]["user_agent"]}
         )
+        self._x_bearer_token_cache: Optional[str] = None
         self.source_health: List[Dict[str, Any]] = []
         history_config = self.config.get("history", {})
         configured_history = bool(history_config.get("enabled", True)) and not dry_run
@@ -801,6 +824,26 @@ class DailyBriefing:
 
     def _limit(self, key: str) -> int:
         return int(self.config.get("limits", {}).get(key, DEFAULT_CONFIG["limits"][key]))
+
+    def _collection_limit(self, key: str) -> int:
+        return max(
+            0,
+            int(
+                self.config.get("collection", {}).get(
+                    key, DEFAULT_CONFIG["collection"][key]
+                )
+            ),
+        )
+
+    def _pipeline_limit(self, key: str) -> int:
+        return max(
+            1,
+            int(
+                self.config.get("pipeline", {}).get(
+                    key, DEFAULT_CONFIG["pipeline"][key]
+                )
+            ),
+        )
 
     def _editorial(self) -> Dict[str, Any]:
         value = self.config.get("editorial", {})
@@ -1192,7 +1235,29 @@ class DailyBriefing:
         started_at = monotonic()
         try:
             source_max_age_days = source_config.get("max_age_days")
-            content = self._get_content(url)
+            urls = [url]
+            urls.extend(
+                clean_text(str(value))
+                for value in source_config.get("fallback_urls", [])
+                if clean_text(str(value))
+            )
+            urls = list(dict.fromkeys(urls))
+            retries_per_url = max(1, int(source_config.get("retries_per_url", 1)))
+            content = b""
+            failures: List[str] = []
+            for candidate_url in urls:
+                for attempt in range(1, retries_per_url + 1):
+                    try:
+                        content = self._get_content(candidate_url)
+                        break
+                    except Exception as exc:
+                        failures.append(
+                            f"{candidate_url} attempt {attempt}: {clean_text(str(exc))}"
+                        )
+                if content:
+                    break
+            if not content:
+                raise RuntimeError("; ".join(failures))
             if source_max_age_days is None:
                 rows = self._parse_feed_articles(content, source, limit * 3)
             else:
@@ -1250,17 +1315,16 @@ class DailyBriefing:
             return []
 
     def fetch_industry_signals(self) -> List[Dict[str, Any]]:
-        limit = self._limit("industry_signals")
-        if limit <= 0:
-            return []
         if self.dry_run:
-            return self._sample("industry_signals", limit)
+            return deepcopy(SAMPLE_DATA["industry_signals"])
 
         sources = self.config.get("sources", {}).get("industry_feeds", [])
         configs = [row for row in sources if isinstance(row, dict) and row.get("url")]
         if not configs:
             return []
-        per_source = self._limit("industry_feed_per_source")
+        per_source = self._collection_limit("industry_feed_per_source")
+        if per_source <= 0:
+            return []
         with ThreadPoolExecutor(max_workers=min(6, len(configs))) as executor:
             groups = list(
                 executor.map(
@@ -1269,7 +1333,7 @@ class DailyBriefing:
                 )
             )
         rows = self._round_robin(groups, sum(len(group) for group in groups))
-        return self._dedupe_items(rows)[:limit]
+        return self._dedupe_items(rows)
 
     def _looks_like_model_release(self, item: Dict[str, Any]) -> bool:
         if item.get("signal_type") == "model_release":
@@ -1783,10 +1847,12 @@ class DailyBriefing:
 
     def fetch_ai_news(self, limit: Optional[int] = None) -> List[Dict[str, str]]:
         """抓取 AI 热点新闻。"""
-        limit = limit or self._limit("ai_news")
+        per_source_limit = limit or self._collection_limit(
+            "general_feed_per_source"
+        )
         self._log("正在抓取 AI 热点...")
         if self.dry_run:
-            return self._sample("ai_news", limit)
+            return self._sample("ai_news", per_source_limit)
 
         url = self.config["sources"]["ai_news"]
         media_articles: List[Dict[str, str]] = []
@@ -1797,14 +1863,14 @@ class DailyBriefing:
                 soup,
                 url,
                 "TechCrunch",
-                max(limit * 2, limit),
+                max(per_source_limit * 2, per_source_limit),
                 ["h2 a", "h3 a", "a.loop-card__title-link", "a.post-block__title__link"],
             )
             relevant_candidates = [
                 article for article in candidates
                 if self._raw_candidates_enabled() or self._is_ai_relevant(article)
             ]
-            media_articles = relevant_candidates[:limit]
+            media_articles = relevant_candidates[:per_source_limit]
             filtered_count = len(candidates) - len(relevant_candidates)
             if filtered_count > 0:
                 self._log(f"已过滤 {filtered_count} 条非 AI 内容")
@@ -1818,7 +1884,7 @@ class DailyBriefing:
 
         official_groups: List[List[Dict[str, str]]] = []
         official_sources = self.config.get("sources", {}).get("ai_official", [])
-        official_limit = self._limit("ai_official_per_source")
+        official_limit = per_source_limit
         if isinstance(official_sources, list) and official_limit > 0:
             configs = [
                 source_config
@@ -1841,9 +1907,11 @@ class DailyBriefing:
         )
         combined = self._round_robin(
             [media_articles, official_articles],
-            limit * 2,
+            len(media_articles) + len(official_articles),
         )
-        articles = self._dedupe_items(combined)[:limit]
+        articles = self._dedupe_items(combined)
+        if limit is not None:
+            articles = articles[:limit]
         source_names = {
             source
             for item in articles
@@ -2019,8 +2087,8 @@ class DailyBriefing:
         limit_per_org: Optional[int] = None,
     ) -> List[Dict[str, Any]]:
         """Track newly created model cards from curated first-party HF orgs."""
-        limit_per_org = limit_per_org or self._limit(
-            "official_model_releases_per_org"
+        limit_per_org = limit_per_org or self._collection_limit(
+            "official_model_per_org"
         )
         if limit_per_org <= 0:
             return []
@@ -2275,7 +2343,7 @@ class DailyBriefing:
         limit_per_source: Optional[int] = None,
     ) -> List[Dict[str, Any]]:
         """Fetch dated model launches from official vendor changelogs."""
-        limit_per_source = limit_per_source or self._limit(
+        limit_per_source = limit_per_source or self._collection_limit(
             "model_changelog_per_source"
         )
         if limit_per_source <= 0:
@@ -2416,9 +2484,49 @@ class DailyBriefing:
                 )
         return groups
 
+    def _x_bearer_token(self) -> str:
+        """Resolve the read-only X token without storing it in project files."""
+        direct = clean_text(os.environ.get("X_BEARER_TOKEN", ""))
+        if direct:
+            return direct
+        if self._x_bearer_token_cache is not None:
+            return self._x_bearer_token_cache
+
+        self._x_bearer_token_cache = ""
+        if sys.platform != "darwin":
+            return ""
+        service = clean_text(
+            os.environ.get(
+                "X_BEARER_KEYCHAIN_SERVICE", "ai-daily-briefing-x-bearer"
+            )
+        )
+        account = clean_text(os.environ.get("X_BEARER_KEYCHAIN_ACCOUNT", "x-api"))
+        if not service or not account:
+            return ""
+        try:
+            result = subprocess.run(
+                [
+                    "security",
+                    "find-generic-password",
+                    "-w",
+                    "-a",
+                    account,
+                    "-s",
+                    service,
+                ],
+                capture_output=True,
+                text=True,
+                timeout=15,
+                check=True,
+            )
+        except (FileNotFoundError, subprocess.CalledProcessError, subprocess.TimeoutExpired):
+            return ""
+        self._x_bearer_token_cache = result.stdout.rstrip("\r\n")
+        return self._x_bearer_token_cache
+
     def fetch_official_x_updates(self) -> List[Dict[str, Any]]:
         """Fetch first-party X posts when an official X API token is available."""
-        token = clean_text(os.environ.get("X_BEARER_TOKEN", ""))
+        token = self._x_bearer_token()
         accounts = self.official_x_watchlist()
         if not token or not accounts:
             if accounts and not token:
@@ -2427,9 +2535,15 @@ class DailyBriefing:
                 )
             return []
 
-        limit = self._limit("official_x_updates")
-        lookback_hours = int(
-            self.config.get("quality", {}).get("official_x_lookback_hours", 48)
+        limit = self._collection_limit("official_x_candidates")
+        quality = self.config.get("quality", {})
+        lookback_hours = int(quality.get("official_x_lookback_hours", 24))
+        max_results_per_request = max(
+            10,
+            min(
+                100,
+                self._collection_limit("official_x_api_results_per_request"),
+            ),
         )
         if limit <= 0:
             return []
@@ -2454,7 +2568,7 @@ class DailyBriefing:
                             datetime.now(timezone.utc)
                             - timedelta(hours=max(1, lookback_hours))
                         ).isoformat(timespec="seconds").replace("+00:00", "Z"),
-                        "max_results": 100,
+                        "max_results": max_results_per_request,
                         "tweet.fields": "author_id,created_at,public_metrics",
                         "expansions": "author_id",
                         "user.fields": "name,username",
@@ -2571,8 +2685,8 @@ class DailyBriefing:
         limit_per_source: Optional[int] = None,
     ) -> List[Dict[str, Any]]:
         """Use official sitemaps as a fallback for companies without a stable feed."""
-        limit_per_source = limit_per_source or self._limit(
-            "official_sitemaps_per_source"
+        limit_per_source = limit_per_source or self._collection_limit(
+            "official_sitemap_per_source"
         )
         groups: List[List[Dict[str, Any]]] = []
         for source_config in self.config.get("sources", {}).get(
@@ -2636,7 +2750,7 @@ class DailyBriefing:
 
     def fetch_github_releases(self) -> List[Dict[str, Any]]:
         """Track releases from the AI tools Rion actually uses."""
-        per_repo = self._limit("github_releases_per_repo")
+        per_repo = self._collection_limit("github_release_per_repo")
         rows: List[Dict[str, Any]] = []
         for repo in self.config.get("sources", {}).get("github_releases", []):
             repo = clean_text(str(repo))
@@ -2689,9 +2803,8 @@ class DailyBriefing:
 
     def fetch_ecosystem_signals(self) -> List[Dict[str, Any]]:
         """Build a candidate pool, respecting the configured editorial boundary."""
-        limit = self._limit("ecosystem_signals")
         if self.dry_run:
-            return self._sample("ecosystem_signals", limit)
+            return deepcopy(SAMPLE_DATA["ecosystem_signals"])
         fetchers = [
             self.fetch_official_model_orgs,
             self.fetch_model_changelogs,
@@ -2712,7 +2825,7 @@ class DailyBriefing:
         if not self._is_industry_profile():
             groups.append(self.fetch_huggingface_models())
         rows = self._round_robin(groups, sum(len(group) for group in groups))
-        return self._dedupe_items(rows)[:limit]
+        return self._dedupe_items(rows)
 
     def fetch_venture_news(self, limit: Optional[int] = None) -> List[Dict[str, str]]:
         """抓取投资和融资新闻。"""
@@ -2720,7 +2833,7 @@ class DailyBriefing:
             "include_capital_signals", True
         ):
             return []
-        limit = limit or self._limit("venture_news")
+        limit = limit or self._collection_limit("venture_page_max")
         self._log("正在抓取投资经济新闻...")
         if self.dry_run:
             return self._sample("venture_news", limit)
@@ -2752,7 +2865,7 @@ class DailyBriefing:
 
     def fetch_github_trending(self, limit: Optional[int] = None) -> List[Dict[str, str]]:
         """抓取 GitHub Trending 项目。"""
-        limit = limit or self._limit("github_projects")
+        limit = limit or self._collection_limit("github_trending_max")
         self._log("正在抓取 GitHub Trending...")
         if self.dry_run:
             return self._sample("github_projects", limit)
@@ -4068,7 +4181,7 @@ class DailyBriefing:
         self,
         items: List[Dict[str, Any]],
     ) -> List[Dict[str, Any]]:
-        limit = self._limit("editorial_queue")
+        limit = self._pipeline_limit("candidate_pool_max")
         if self._raw_candidates_enabled():
             groups: Dict[str, List[Dict[str, Any]]] = {}
             for item in items:
@@ -4717,6 +4830,8 @@ class DailyBriefing:
                 github_projects,
             )
         editorial_queue = self.generate_editorial_queue(ranked_candidates)
+        candidate_pool_max = self._pipeline_limit("candidate_pool_max")
+        final_report_max = self._pipeline_limit("final_report_max")
 
         if self.history_store is not None:
             selected_keys = {
@@ -4739,10 +4854,11 @@ class DailyBriefing:
                 "editorial_review": {
                     "status": "pending" if self._raw_candidates_enabled() else "rule_preview",
                     "candidate_selection": "source_round_robin_recent_first" if self._raw_candidates_enabled() else "rule_ranked",
-                    "candidate_pool_limit": self._limit("editorial_queue"),
-                    "target_count": int(
-                        self._editorial().get("daily_top_n", 10)
+                    "candidate_pool_limit": self._pipeline_limit(
+                        "candidate_pool_max"
                     ),
+                    "shortlist_size": self._pipeline_limit("shortlist_size"),
+                    "target_count": self._pipeline_limit("final_report_max"),
                     "selection_method": "agent_editorial_judgment",
                     "shortfall_policy": (
                         "report_fewer_items_instead_of_filling_with_stale_or_low-signal_content"
@@ -4758,16 +4874,23 @@ class DailyBriefing:
                 "official_x_monitor": {
                     "mode": (
                         "x_api"
-                        if clean_text(os.environ.get("X_BEARER_TOKEN", ""))
+                        if self._x_bearer_token()
                         else "codex_web_search"
                     ),
                     "account_count": len(self.official_x_watchlist()),
                     "search_group_count": len(self.official_x_search_groups()),
+                    # X is a high-velocity source and intentionally uses its own
+                    # tighter window instead of the report-wide lookback.
                     "lookback_hours": int(
                         self.config.get("quality", {}).get(
-                            "official_x_lookback_hours", 48
+                            "official_x_lookback_hours", 24
                         )
-                    ) if self.lookback_hours is None else self.lookback_hours,
+                    ),
+                    "max_results_per_request": int(
+                        self._collection_limit(
+                            "official_x_api_results_per_request"
+                        )
+                    ),
                 },
                 "industry_monitor": {
                     "automatic_feed_count": len(
@@ -4782,8 +4905,8 @@ class DailyBriefing:
                 "editorial_instructions": [
                     "原始候选不按关键词筛选。编辑须逐条阅读全部候选，在内部判断其与用户关注方向的相关性、事实依据、时效和产业影响，再选出最多十条。这里的判断/投票由当前编辑 Agent 完成，不代表多个独立模型投票；入选或不入选理由只保留在临时推理记录，不写入最终 Top 10。原始抓取包不等于最终简报；focus 和 mode 的语义边界由编辑执行。",
                     "只保留能核验的事实和原始链接，不补写来源中没有的数字。",
-                    "先阅读 sections.editorial_queue 中最多 80 条候选，再由编辑 Agent 独立选择最终十条；不得直接照搬 sections.highlights 的规则排序。定时日报候选池只包含报告截止前 48 小时且有明确发布日期的内容，优先当天发布；前一天已经发送过的事件默认排除，只有新版本、新可用性、新基准或重大进展才允许重复。优先实质发布、生产部署、产业影响和跨层代表性，压低奖项、营销稿、重复版本和泛案例文章。",
-                    "最终十条不足时如实少报，不用旧闻、低可信媒体转述或无实质变化的内容填充数量。",
+                    f"先阅读 sections.editorial_queue 中最多 {candidate_pool_max} 条候选，再由编辑 Agent 独立选择最终最多 {final_report_max} 条；模型、产品、基础设施、应用和商业事件没有类别配额，也不得直接照搬规则评分排序。定时日报候选池只包含报告截止前 48 小时且有明确发布日期的内容，优先当天发布；前一天已经发送过的事件默认排除，只有新版本、新可用性、新基准或重大进展才允许重复。优先实质发布、生产部署、产业影响和跨层代表性，压低奖项、营销稿、重复版本和泛案例文章。",
+                    f"最终不足 {final_report_max} 条时如实少报，不用旧闻、低可信媒体转述或无实质变化的内容填充数量。",
                     "当前简报聚焦 AI 工业界：不把 arXiv、论文、学术会议或纯理论研究编入成品；模型、产品、基础设施和商业事件优先引用公司公告、模型卡、Changelog、Release 或可核验披露。",
                     "优先选择新变化、多源印证、官方更新和可转成内容或商业动作的信号。",
                     "模型发布必须优先引用厂商官网、官方 Changelog、官方模型卡或官方 Release，不用媒体转述替代发布确认。",

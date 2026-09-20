@@ -9,6 +9,11 @@ from scripts import scheduled_briefing as runner
 
 
 class ScheduledBriefingTests(unittest.TestCase):
+    def test_pipeline_limits_are_loaded_from_project_config(self):
+        self.assertEqual(runner.MAX_CANDIDATES, 80)
+        self.assertEqual(runner.SHORTLIST_SIZE, 30)
+        self.assertEqual(runner.FINAL_REPORT_MAX, 10)
+
     def test_date_range_includes_every_missing_day(self):
         self.assertEqual(
             runner.date_range("2026-09-18", "2026-09-20"),

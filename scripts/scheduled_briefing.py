@@ -16,6 +16,8 @@ import sys
 from typing import Any
 from zoneinfo import ZoneInfo
 
+import yaml
+
 
 ROOT = Path(__file__).resolve().parents[1]
 CODEX = Path(
@@ -44,14 +46,35 @@ RECIPIENTS = Path(
 EMAIL_LEDGER = Path(
     os.environ.get("BRIEFING_EMAIL_LEDGER", str(LOG_ROOT / "email-state.json"))
 )
+sys.path.insert(0, str(ROOT))
+
+
+def load_pipeline_limits() -> dict[str, int]:
+    defaults = {
+        "candidate_pool_max": 80,
+        "shortlist_size": 30,
+        "final_report_max": 10,
+    }
+    try:
+        configured = yaml.safe_load(
+            (ROOT / "config.yaml").read_text(encoding="utf-8")
+        ).get("pipeline", {})
+    except (OSError, AttributeError, yaml.YAMLError):
+        configured = {}
+    return {
+        key: max(1, int(configured.get(key, default)))
+        for key, default in defaults.items()
+    }
+
+
 START_DATE = os.environ.get("BRIEFING_START_DATE", "2026-09-18")
 RETRY_DELAYS_MINUTES = (10, 30, 60)
 MODEL = "gpt-5.6-sol"
 REASONING_EFFORT = "high"
-MAX_CANDIDATES = 80
-SHORTLIST_SIZE = 30
-
-sys.path.insert(0, str(ROOT))
+PIPELINE_LIMITS = load_pipeline_limits()
+MAX_CANDIDATES = PIPELINE_LIMITS["candidate_pool_max"]
+SHORTLIST_SIZE = min(PIPELINE_LIMITS["shortlist_size"], MAX_CANDIDATES)
+FINAL_REPORT_MAX = min(PIPELINE_LIMITS["final_report_max"], SHORTLIST_SIZE)
 
 
 def atomic_write_text(path: Path, value: str) -> None:
@@ -381,7 +404,7 @@ def run_selection(day: str, directory: Path, attempt: int) -> None:
         else "There is no previous sent report to compare against."
     )
     prompt = f"""You are stage 1 of an AI industry daily briefing pipeline.
-Read the fixed candidate packet at {packet}. It contains at most 80 candidates for report date {day}; the packet window is explicitly limited to the 48 hours ending at the report cutoff.
+Read the fixed candidate packet at {packet}. It contains at most {MAX_CANDIDATES} candidates for report date {day}; the packet window is explicitly limited to the 48 hours ending at the report cutoff.
 {previous_context}
 Select exactly {target} candidate IDs for a verification shortlist. Judge editorially; do not use keyword scoring and do not browse the web. Cover consequential company releases and changes across foundation models, multimodal, world models, embodied AI, agents, developer products, chips, data centers, cloud/inference infrastructure, adoption, and major commercial events. Exclude academic papers and purely academic research. Prefer recent, concrete and non-duplicate events from credible sources, including strong industry media and analysis such as SemiAnalysis, not only company homepages.
 Prior-day items are excluded by default. Re-select an item only when the candidate clearly represents a new version, new availability, a new benchmark result, or a material new development after the prior report. Different URLs or different wording for the same event do not count as new progress.
@@ -398,7 +421,9 @@ Return only the requested JSON containing selected_candidate_ids. Do not write p
     parsed = json.loads(response.read_text(encoding="utf-8"))
     atomic_write_json(selection, parsed)
     if not selection_is_valid(selection, packet):
-        raise RuntimeError("Stage 1 returned an invalid 30-candidate selection")
+        raise RuntimeError(
+            f"Stage 1 returned an invalid {target}-candidate selection"
+        )
     build_shortlist(packet, selection, shortlist)
 
 
@@ -440,8 +465,10 @@ def validate_draft(path: Path, expected_day: str | None = None) -> None:
     if matched:
         raise RuntimeError(f"Draft contains forbidden editorial filler: {matched}")
     count = len(re.findall(r"^\d+\. \[", text, re.MULTILINE))
-    if not 1 <= count <= 10:
-        raise RuntimeError(f"Expected 1-10 editorial items, got {count}")
+    if not 1 <= count <= FINAL_REPORT_MAX:
+        raise RuntimeError(
+            f"Expected 1-{FINAL_REPORT_MAX} editorial items, got {count}"
+        )
     blocks = re.findall(
         r"(?ms)^\d+\. \[[^\]]+\]\(https?://[^)]+\)\n(.*?)(?=^\d+\. \[|^## |\Z)",
         text,
@@ -498,7 +525,7 @@ Report date: {day} in Asia/Shanghai; the candidate window is the 48 hours ending
 
 Resume from the existing progress and draft when present. Open original sources for shortlisted candidates, verify facts and actual publication dates (not sitemap modification dates), and reject anything after the cutoff. Use other credible pages only to corroborate shortlisted events; every final item must correspond to a shortlist candidate. Update {progress} in small batches while working, preserving checked_candidate_ids and concise factual notes so a later retry can continue. Do not write long selection rationales.
 
-Choose up to 10 of the strongest verified AI INDUSTRY stories across models, multimodal, world models, embodied AI, products, agents, infrastructure, adoption and commercialization. Prior-day items are excluded by default. Allow a repeated event only if the verified source shows a new version, new availability, a new benchmark result, or a material new development after the previous report; a new URL or rewritten headline alone is insufficient. Do not include academic papers or purely academic research. Write the complete final Chinese Markdown to {draft}, beginning with `# AI 工业界前沿简报 · {day}`. Under `## 本日十条行业信号`, every item must use this exact structure, including the three-space indentation:
+Choose up to {FINAL_REPORT_MAX} of the strongest verified AI INDUSTRY stories across models, multimodal, world models, embodied AI, products, agents, infrastructure, adoption and commercialization. There are no category quotas: judge the full shortlist by significance, timeliness, source credibility and technical substance. Prior-day items are excluded by default. Allow a repeated event only if the verified source shows a new version, new availability, a new benchmark result, or a material new development after the previous report; a new URL or rewritten headline alone is insufficient. Do not include academic papers or purely academic research. Write the complete final Chinese Markdown to {draft}, beginning with `# AI 工业界前沿简报 · {day}`. Under `## 本日十条行业信号`, every item must use this exact structure, including the three-space indentation:
 Exclude cryptocurrency and blockchain stories even when they mention AI. Do not use a personal profile, named-person preference, legacy personalization score, or feedback-derived preference adjustment.
 
 1. [标题](原始链接)
@@ -508,7 +535,7 @@ Exclude cryptocurrency and blockchain stories even when they mention AI. Do not 
 
    来源：来源名称｜发布日期：YYYY-MM-DD｜置信度：高/中高/中
 
-Both 概述 and 技术总结 are required for every item and must be separate paragraphs. Each sentence must add a distinct fact. Include no 入选理由/为什么重要, generic editorial judgment, rebuttal-style caveats, or filler. Use fewer than 10 items if evidence is insufficient.
+Both 概述 and 技术总结 are required for every item and must be separate paragraphs. Each sentence must add a distinct fact. Include no 入选理由/为什么重要, generic editorial judgment, rebuttal-style caveats, or filler. Use fewer than {FINAL_REPORT_MAX} items if evidence is insufficient.
 
 Run `.venv/bin/python skills/daily-briefing/scripts/validate-briefing.py {draft}` and fix the draft until it passes. Then mark {progress} status complete. Produce only this Markdown draft and progress JSON; do not send email, generate HTML, edit project code/config/skills, or collect a new candidate pool."""
     command = codex_base_command(writable_dir=directory, web=True)

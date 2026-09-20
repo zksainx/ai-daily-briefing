@@ -70,7 +70,7 @@ Skill 内部使用的两阶段精编命令：
 python briefing.py --editorial-packet --output-file outputs/editorial_packet.json
 ```
 
-先读取 `sections.model_releases`，再读取 `sections.editorial_queue`，由当前 Codex 模型完成最终选稿与中文改写。只允许基于候选包事实写作，必须保留原始链接。CLI 的 Markdown 是无模型环境下的确定性兜底。
+读取 `sections.editorial_queue` 中的完整候选池，由当前 Codex 模型完成最终选稿与中文改写。模型、产品、基础设施、应用和商业事件没有预分配名额；只允许基于候选包事实写作，必须保留原始链接。CLI 的 Markdown 是无模型环境下的确定性兜底。
 
 Codex 保存精编版后会运行：
 

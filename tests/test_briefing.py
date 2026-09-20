@@ -6,7 +6,7 @@ import subprocess
 import tempfile
 import unittest
 from contextlib import redirect_stderr, redirect_stdout
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from io import StringIO
 from pathlib import Path
 from unittest.mock import patch
@@ -741,7 +741,13 @@ class DailyBriefingTests(unittest.TestCase):
                     },
                 }
 
-        briefing.session.get = lambda *args, **kwargs: Response()
+        request_params = []
+
+        def fake_get(*args, **kwargs):
+            request_params.append(kwargs["params"])
+            return Response()
+
+        briefing.session.get = fake_get
         with patch.dict(os.environ, {"X_BEARER_TOKEN": "test-token"}):
             rows = briefing.fetch_official_x_updates()
 
@@ -749,6 +755,59 @@ class DailyBriefingTests(unittest.TestCase):
         self.assertEqual(rows[0]["signal_type"], "official_social")
         self.assertEqual(rows[0]["url"], "https://x.com/OpenAI/status/123")
         self.assertTrue(rows[0]["official"])
+        self.assertEqual(request_params[0]["max_results"], 10)
+        start_time = datetime.fromisoformat(
+            request_params[0]["start_time"].replace("Z", "+00:00")
+        )
+        age = datetime.now(timezone.utc) - start_time
+        self.assertGreater(age, timedelta(hours=23, minutes=59))
+        self.assertLess(age, timedelta(hours=24, minutes=1))
+
+    @patch("briefing.subprocess.run")
+    def test_official_x_token_loads_from_macos_keychain(self, run):
+        briefing = DailyBriefing(dry_run=True)
+        run.return_value.stdout = "keychain-token\n"
+
+        with patch("briefing.sys.platform", "darwin"), patch.dict(
+            os.environ,
+            {
+                "X_BEARER_TOKEN": "",
+                "X_BEARER_KEYCHAIN_SERVICE": "test-x-service",
+                "X_BEARER_KEYCHAIN_ACCOUNT": "test-x-account",
+            },
+        ):
+            token = briefing._x_bearer_token()
+
+        self.assertEqual(token, "keychain-token")
+        run.assert_called_once_with(
+            [
+                "security",
+                "find-generic-password",
+                "-w",
+                "-a",
+                "test-x-account",
+                "-s",
+                "test-x-service",
+            ],
+            capture_output=True,
+            text=True,
+            timeout=15,
+            check=True,
+        )
+
+    def test_official_x_window_is_independent_from_report_window(self):
+        briefing = DailyBriefing(dry_run=True, lookback_hours=48)
+
+        payload = self.generate_quietly(briefing)
+
+        self.assertEqual(payload["metadata"]["request"]["lookback_hours"], 48)
+        self.assertEqual(
+            payload["metadata"]["official_x_monitor"]["lookback_hours"], 24
+        )
+        self.assertEqual(
+            payload["metadata"]["official_x_monitor"]["max_results_per_request"],
+            10,
+        )
 
     def test_qwen_changelog_parser_keeps_qwen_and_excludes_third_party_models(self):
         briefing = DailyBriefing(dry_run=True)
@@ -1025,6 +1084,89 @@ class DailyBriefingTests(unittest.TestCase):
         ])
         self.assertEqual(rows[0]["source_priority"], "high")
         self.assertEqual(rows[0]["source_role"], "analysis")
+
+    def test_industry_feed_uses_fallback_after_transient_primary_failure(self):
+        briefing = DailyBriefing(dry_run=False, history_enabled=False)
+        requested = []
+
+        def fake_get_content(url):
+            requested.append(url)
+            if url == "https://www.qbitai.com/feed":
+                raise OSError("transient TLS failure")
+            return b"feed"
+
+        briefing._get_content = fake_get_content
+        briefing._parse_feed_articles = lambda content, source, limit: [
+            {
+                "title": "量子位报道新的 AI 产品发布",
+                "summary": "一家公司上线新的工业界 AI 产品。",
+                "url": "https://www.qbitai.com/example",
+                "source": source,
+            }
+        ]
+
+        rows = briefing._fetch_industry_feed(
+            {
+                "name": "量子位",
+                "url": "https://www.qbitai.com/feed",
+                "fallback_urls": ["https://www.qbitai.com/rss"],
+                "retries_per_url": 2,
+                "track": "applications",
+                "authority": "media",
+            },
+            4,
+        )
+
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(requested.count("https://www.qbitai.com/feed"), 2)
+        self.assertEqual(requested[-1], "https://www.qbitai.com/rss")
+
+    def test_industry_collection_has_no_intermediate_total_cap(self):
+        briefing = DailyBriefing(dry_run=False, history_enabled=False)
+        briefing.config["quality"]["min_similarity_tokens"] = 100
+        briefing.config["sources"]["industry_feeds"] = [
+            {"name": f"source-{index}", "url": f"https://example.com/{index}"}
+            for index in range(11)
+        ]
+
+        def fake_fetch(source, limit):
+            return [
+                {
+                    "title": f"{source['name']} item {item}",
+                    "url": f"{source['url']}/{item}",
+                    "source": source["name"],
+                }
+                for item in range(limit)
+            ]
+
+        briefing._fetch_industry_feed = fake_fetch
+
+        rows = briefing.fetch_industry_signals()
+
+        self.assertEqual(len(rows), 44)
+
+    def test_ecosystem_collection_has_no_intermediate_total_cap(self):
+        briefing = DailyBriefing(dry_run=False, history_enabled=False)
+
+        def rows(prefix):
+            return [
+                {
+                    "title": f"{prefix} {index}",
+                    "url": f"https://example.com/{prefix}/{index}",
+                    "source": prefix,
+                }
+                for index in range(5)
+            ]
+
+        briefing.fetch_official_model_orgs = lambda: rows("models")
+        briefing.fetch_model_changelogs = lambda: rows("changelog")
+        briefing.fetch_official_x_updates = lambda: rows("x")
+        briefing.fetch_official_sitemaps = lambda: rows("sitemap")
+        briefing.fetch_github_releases = lambda: rows("releases")
+
+        result = briefing.fetch_ecosystem_signals()
+
+        self.assertEqual(len(result), 25)
 
     def test_non_model_github_release_prefers_product_update_event(self):
         briefing = DailyBriefing(dry_run=True)

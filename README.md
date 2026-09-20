@@ -129,15 +129,18 @@ Markdown 中的新闻标题和来源链接都可以直接点击。HTML 是不依
 | 音频/音乐模型 | ElevenLabs、Suno | `@ElevenLabs`、`@suno_ai_` |
 | 模型平台/生态 | Hugging Face、OpenRouter、Together AI、Snowflake Cortex、Salesforce AI | `@huggingface`、`@OpenRouter`、`@togethercompute`、`@SnowflakeDB`、`@SalesforceDevs` |
 
-官网、Changelog 和模型卡用于确认事实；X 用于捕捉首发、预告、API/价格变更和产品动态。没有配置 X API 时，Codex 会读取精编包中的账号清单并联网检索，不影响直接调用。
+官网、Changelog 和模型卡用于确认事实；X 用于捕捉首发、预告、API/价格变更和产品动态。交互式完整精编在没有 X API 时仍可读取账号清单进行联网检索；两阶段定时邮件为了固定候选包和可恢复性，不依赖该回退，需配置 Bearer Token 才会稳定采集 X。
 
-若希望本地 Python 自动抓取全部官方账号，可选配置环境变量：
+若希望本地 Python 和 LaunchAgent 自动抓取全部官方账号，macOS 推荐把 Bearer Token 存入 Keychain。下面的命令会安全地在终端中提示输入 Token：
 
 ```bash
-export X_BEARER_TOKEN="你的 X API Bearer Token"
+security add-generic-password -U \
+  -a "x-api" \
+  -s "ai-daily-briefing-x-bearer" \
+  -w
 ```
 
-不要把 Token 写进 `config.yaml` 或提交到 Git。
+程序会自动读取该 Keychain 项，无需把 Token 写进 `config.yaml`、LaunchAgent plist 或仓库。`X_BEARER_TOKEN` 环境变量仍可用于临时测试，并优先于 Keychain。
 
 ## 快速开始
 
@@ -319,19 +322,18 @@ output:
   language: "zh"
   output_dir: "outputs"
 
-limits:
-  ai_news: 10
-  ai_official_per_source: 3
-  official_model_releases_per_org: 2
+collection:
+  general_feed_per_source: 4
+  industry_feed_per_source: 4
+  official_model_per_org: 2
   model_changelog_per_source: 3
-  model_releases: 8
-  industry_chain_per_layer: 3
-  application_trends: 6
-  ai_funding: 6
-  cross_layer_connections: 3
-  venture_news: 5
-  github_projects: 10
-  topics: 5
+  official_x_candidates: 8
+  official_x_api_results_per_request: 10
+
+pipeline:
+  candidate_pool_max: 80
+  shortlist_size: 30
+  final_report_max: 10
 
 quality:
   max_feed_age_days: 10
@@ -433,7 +435,7 @@ MIT
 # 当前采集与编辑约定
 
 默认启用 `editorial.raw_candidates`：采集阶段不按 AI、行业或研究关键词删除内容。
-候选按来源轮流取近期条目，保留原始标题、摘要、链接及日期，最多 80 条；继续执行去重与日期检查。定时任务将当天候选包永久保存在本机状态目录。
+各来源只设置请求安全上限，不给模型、产品、基础设施、融资等类别预分配名额。候选汇总去重后按来源轮流取近期条目，保留原始标题、摘要、链接及日期，最多 80 条；定时任务将当天候选包永久保存在本机状态目录。
 Python 输出为待编辑候选包，不自动生成规则 Top 10。第一阶段由当前编辑 Agent 从候选中选出 30 条，仅记录入选 ID，不逐条撰写长理由。
 第二阶段只核验这 30 条，保存核验进度和草稿，最终选择最多 10 条；失败后可从已有阶段继续。
 这一步是编辑判断，不是多个独立模型投票；来源缺摘要时需要打开原文。

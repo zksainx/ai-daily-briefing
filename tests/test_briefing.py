@@ -756,6 +756,7 @@ class DailyBriefingTests(unittest.TestCase):
         self.assertEqual(rows[0]["url"], "https://x.com/OpenAI/status/123")
         self.assertTrue(rows[0]["official"])
         self.assertEqual(request_params[0]["max_results"], 10)
+        self.assertIn("-is:retweet -is:reply", request_params[0]["query"])
         start_time = datetime.fromisoformat(
             request_params[0]["start_time"].replace("Z", "+00:00")
         )
@@ -808,6 +809,38 @@ class DailyBriefingTests(unittest.TestCase):
             payload["metadata"]["official_x_monitor"]["max_results_per_request"],
             10,
         )
+
+    def test_official_x_uses_exact_report_cutoff_window(self):
+        cutoff = datetime(2026, 9, 20, 0, 0, tzinfo=timezone(timedelta(hours=8)))
+        briefing = DailyBriefing(
+            dry_run=False,
+            history_enabled=False,
+            report_cutoff=cutoff,
+        )
+        briefing.config["sources"]["official_x_accounts"] = [
+            {"name": "OpenAI", "handle": "OpenAI", "country": "US"}
+        ]
+        request_params = []
+
+        class Response:
+            def raise_for_status(self):
+                return None
+
+            def json(self):
+                return {"data": [], "includes": {"users": []}}
+
+        def fake_get(*args, **kwargs):
+            request_params.append(kwargs["params"])
+            return Response()
+
+        briefing.session.get = fake_get
+        with patch.dict(os.environ, {"X_BEARER_TOKEN": "test-token"}):
+            briefing.fetch_official_x_updates()
+
+        self.assertEqual(request_params[0]["start_time"], "2026-09-18T16:00:00Z")
+        self.assertEqual(request_params[0]["end_time"], "2026-09-19T16:00:00Z")
+        self.assertEqual(briefing.x_usage_stats["api_calls"], 1)
+        self.assertEqual(briefing.x_usage_stats["post_resources"], 0)
 
     def test_qwen_changelog_parser_keeps_qwen_and_excludes_third_party_models(self):
         briefing = DailyBriefing(dry_run=True)

@@ -69,8 +69,8 @@ def load_pipeline_limits() -> dict[str, int]:
 
 START_DATE = os.environ.get("BRIEFING_START_DATE", "2026-09-18")
 RETRY_DELAYS_MINUTES = (10, 30, 60)
-MODEL = "gpt-5.6-sol"
-REASONING_EFFORT = "high"
+MODEL = "gpt-5.6-terra"
+REASONING_EFFORT = "xhigh"
 PIPELINE_LIMITS = load_pipeline_limits()
 MAX_CANDIDATES = PIPELINE_LIMITS["candidate_pool_max"]
 SHORTLIST_SIZE = min(PIPELINE_LIMITS["shortlist_size"], MAX_CANDIDATES)
@@ -235,14 +235,16 @@ def candidate_packet_is_valid(path: Path, day: str) -> bool:
 def collect_candidates(day: str, destination: Path) -> None:
     from briefing import DailyBriefing
 
-    briefing = DailyBriefing(
-        config_path=str(ROOT / "config.yaml"), history_enabled=False
-    )
-    data = briefing.generate_data()
     cutoff = datetime.combine(
         date.fromisoformat(day) + timedelta(days=1), time.min, TIMEZONE
     )
     window_start = cutoff - timedelta(hours=48)
+    briefing = DailyBriefing(
+        config_path=str(ROOT / "config.yaml"),
+        history_enabled=False,
+        report_cutoff=cutoff,
+    )
+    data = briefing.generate_data()
 
     def parse_datetime(value: str) -> datetime | None:
         value = str(value or "").strip()
@@ -283,6 +285,7 @@ def collect_candidates(day: str, destination: Path) -> None:
         "candidate_count": len(candidates),
         "candidates": candidates,
         "source_health": getattr(briefing, "source_health", {}),
+        "x_usage": getattr(briefing, "x_usage_stats", {}),
     }
     atomic_write_json(destination, packet)
 

@@ -14,6 +14,13 @@ class ScheduledBriefingTests(unittest.TestCase):
         self.assertEqual(runner.SHORTLIST_SIZE, 30)
         self.assertEqual(runner.FINAL_REPORT_MAX, 10)
 
+    def test_codex_workflow_forces_terra_with_xhigh_reasoning(self):
+        command = runner.codex_base_command(
+            writable_dir=Path("/tmp/briefing-test"), web=False
+        )
+        self.assertEqual(command[command.index("--model") + 1], "gpt-5.6-terra")
+        self.assertIn('model_reasoning_effort="xhigh"', command)
+
     def test_date_range_includes_every_missing_day(self):
         self.assertEqual(
             runner.date_range("2026-09-18", "2026-09-20"),

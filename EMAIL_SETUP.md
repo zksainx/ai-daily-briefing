@@ -68,7 +68,7 @@ security add-generic-password -U \
 
 ## 定时发送
 
-日报编辑通过 `codex exec --model gpt-5.6-sol -c 'model_reasoning_effort="high"'` 固定模型和推理强度，不随全局默认模型变化。
+日报编辑通过 `codex exec --model gpt-5.6-terra -c 'model_reasoning_effort="xhigh"'` 固定模型和推理强度，不随全局默认模型变化。
 
 `scripts/scheduled_briefing.py` 已在日报发布后调用邮件发送器。启动时会从 2026-09-18 起检查缺失日期，并优先补做最早的未完成日报。运行状态位于 `~/Library/Application Support/ai-daily-briefing/runs/YYYY-MM-DD/`，候选包不会再放入临时目录。
 

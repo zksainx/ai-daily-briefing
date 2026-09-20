@@ -780,6 +780,7 @@ class DailyBriefing:
         briefing_mode: str = "all",
         focus: str = "",
         lookback_hours: Optional[int] = None,
+        report_cutoff: Optional[datetime] = None,
     ):
         self.config_path = Path(config_path)
         self.config = self._load_config(self.config_path)
@@ -789,11 +790,17 @@ class DailyBriefing:
         self.lookback_hours = (
             max(1, int(lookback_hours)) if lookback_hours is not None else None
         )
+        self.report_cutoff = report_cutoff
         self.session = requests.Session()
         self.session.headers.update(
             {"User-Agent": self.config["request"]["user_agent"]}
         )
         self._x_bearer_token_cache: Optional[str] = None
+        self.x_usage_stats: Dict[str, Any] = {
+            "api_calls": 0,
+            "post_resources": 0,
+            "user_resources": 0,
+        }
         self.source_health: List[Dict[str, Any]] = []
         history_config = self.config.get("history", {})
         configured_history = bool(history_config.get("enabled", True)) and not dry_run
@@ -2553,30 +2560,50 @@ class DailyBriefing:
         }
         started_at = monotonic()
         rows: List[Dict[str, Any]] = []
+        api_calls = 0
+        post_resources = 0
+        user_resources = 0
         try:
+            window_end = self.report_cutoff or datetime.now(timezone.utc)
+            if window_end.tzinfo is None:
+                window_end = window_end.replace(tzinfo=timezone.utc)
+            window_end = window_end.astimezone(timezone.utc)
+            window_start = window_end - timedelta(hours=max(1, lookback_hours))
+            include_end_time = window_end <= datetime.now(timezone.utc) - timedelta(
+                seconds=10
+            )
             for offset in range(0, len(accounts), 8):
                 group = accounts[offset : offset + 8]
                 query = "(" + " OR ".join(
                     f"from:{account['handle']}" for account in group
-                ) + ") -is:retweet"
+                ) + ") -is:retweet -is:reply"
+                params = {
+                    "query": query,
+                    "start_time": window_start.isoformat(timespec="seconds").replace(
+                        "+00:00", "Z"
+                    ),
+                    "max_results": max_results_per_request,
+                    "tweet.fields": "author_id,created_at,public_metrics",
+                    "expansions": "author_id",
+                    "user.fields": "name,username",
+                }
+                if include_end_time:
+                    params["end_time"] = window_end.isoformat(
+                        timespec="seconds"
+                    ).replace("+00:00", "Z")
                 response = self.session.get(
                     "https://api.x.com/2/tweets/search/recent",
                     headers={"Authorization": f"Bearer {token}"},
-                    params={
-                        "query": query,
-                        "start_time": (
-                            datetime.now(timezone.utc)
-                            - timedelta(hours=max(1, lookback_hours))
-                        ).isoformat(timespec="seconds").replace("+00:00", "Z"),
-                        "max_results": max_results_per_request,
-                        "tweet.fields": "author_id,created_at,public_metrics",
-                        "expansions": "author_id",
-                        "user.fields": "name,username",
-                    },
+                    params=params,
                     timeout=int(self.config.get("request", {}).get("timeout", 25)),
                 )
                 response.raise_for_status()
                 payload = response.json()
+                api_calls += 1
+                post_resources += len(payload.get("data", []))
+                user_resources += len(
+                    payload.get("includes", {}).get("users", [])
+                )
                 users = {
                     clean_text(user.get("id", "")): user
                     for user in payload.get("includes", {}).get("users", [])
@@ -2619,18 +2646,49 @@ class DailyBriefing:
                     self._mark_official_model_release(row, "X 官方模型动态")
                     rows.append(row)
             rows = self._dedupe_items(rows)
-            rows.sort(
-                key=lambda row: (
-                    clean_text(row.get("published_at", "")),
-                    int(row.get("popularity", 0)),
+            by_account: Dict[str, List[Dict[str, Any]]] = {}
+            for row in rows:
+                by_account.setdefault(
+                    clean_text(row.get("x_handle", "")).lower(), []
+                ).append(row)
+            for account_rows in by_account.values():
+                account_rows.sort(
+                    key=lambda row: (
+                        clean_text(row.get("published_at", "")),
+                        int(row.get("popularity", 0)),
+                    ),
+                    reverse=True,
+                )
+            groups = sorted(
+                by_account.values(),
+                key=lambda account_rows: (
+                    clean_text(account_rows[0].get("published_at", "")),
+                    int(account_rows[0].get("popularity", 0)),
                 ),
                 reverse=True,
             )
-            rows = rows[:limit]
+            rows = self._round_robin(groups, limit)
+            self.x_usage_stats = {
+                "api_calls": api_calls,
+                "post_resources": post_resources,
+                "user_resources": user_resources,
+                "window_start": window_start.isoformat(),
+                "window_end": window_end.isoformat(),
+                "retained_candidates": len(rows),
+            }
             self._record_source_health("X 官方账号", started_at, len(rows))
-            self._log(f"获取到 {len(rows)} 条 X 官方账号动态")
+            self._log(
+                f"获取到 {len(rows)} 条 X 官方账号动态；"
+                f"API 返回 {post_resources} Posts / {user_resources} Users"
+            )
             return rows
         except Exception as exc:
+            self.x_usage_stats = {
+                "api_calls": api_calls,
+                "post_resources": post_resources,
+                "user_resources": user_resources,
+                "error": clean_text(str(exc)),
+            }
             self._log(f"抓取 X 官方账号失败: {exc}")
             self._record_source_health("X 官方账号", started_at, 0, str(exc))
             return []

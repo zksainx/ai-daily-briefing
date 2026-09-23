@@ -60,6 +60,24 @@ class ScheduledBriefingTests(unittest.TestCase):
             self.assertNotIn("next_retry_at", stage)
             self.assertEqual(stage["exhausted_for_day"], "2026-09-19")
 
+    def test_backlog_continues_after_an_older_day_fails(self):
+        processed = []
+
+        def fake_process(day, now, *, no_send):
+            processed.append(day)
+            return "failed" if day == "2026-09-22" else "complete"
+
+        with tempfile.TemporaryDirectory() as tmpdir, patch.object(
+            runner, "LOG_ROOT", Path(tmpdir)
+        ), patch.object(
+            runner, "date_range", return_value=["2026-09-22", "2026-09-23"]
+        ), patch.object(runner, "process_day", side_effect=fake_process), patch(
+            "sys.argv", ["scheduled_briefing.py"]
+        ):
+            self.assertEqual(runner.main(), 1)
+
+        self.assertEqual(processed, ["2026-09-22", "2026-09-23"])
+
     def test_selection_requires_exactly_30_unique_known_ids(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             directory = Path(tmpdir)

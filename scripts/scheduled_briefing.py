@@ -761,9 +761,11 @@ def main() -> int:
         for day in days:
             result = process_day(day, datetime.now(TIMEZONE), no_send=args.no_send)
             print(f"{day}: {result}", flush=True)
-            if result in {"failed", "waiting"}:
-                exit_code = 1 if result == "failed" else 0
-                break
+            if result == "failed":
+                # An old email retry must not prevent newer reports from being
+                # generated and delivered. The failed date retains its state
+                # and will be retried on a later LaunchAgent invocation.
+                exit_code = 1
         return exit_code
 
 

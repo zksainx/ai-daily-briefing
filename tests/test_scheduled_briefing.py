@@ -27,6 +27,13 @@ class ScheduledBriefingTests(unittest.TestCase):
             ["2026-09-18", "2026-09-19", "2026-09-20"],
         )
 
+    def test_utc_candidate_timestamp_uses_shanghai_report_date(self):
+        published = runner.parse_published_at("2026-09-21T18:18:40Z")
+
+        self.assertIsNotNone(published)
+        self.assertEqual(published.isoformat(), "2026-09-22T02:18:40+08:00")
+        self.assertEqual(published.date().isoformat(), "2026-09-22")
+
     def test_retry_schedule_is_10_30_60_then_exhausted(self):
         now = datetime(2026, 9, 19, 1, 0, tzinfo=runner.TIMEZONE)
         state = {"stages": {}}

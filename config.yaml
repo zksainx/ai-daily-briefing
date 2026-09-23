@@ -38,6 +38,7 @@ sources:
     - {name: "NVIDIA Generative AI Blog", url: "https://developer.nvidia.com/blog/category/generative-ai/feed/", track: "infrastructure", country: "US", layer_hint: "upstream", authority: "official"}
     - {name: "AWS Machine Learning Blog", url: "https://aws.amazon.com/blogs/machine-learning/feed/", track: "infrastructure", country: "US", layer_hint: "upstream", authority: "official"}
     - {name: "Google Cloud AI", url: "https://cloudblog.withgoogle.com/products/ai-machine-learning/rss/", track: "infrastructure", country: "US", layer_hint: "midstream", authority: "official"}
+    - {name: "OpenAI Developer Announcements", url: "https://community.openai.com/c/announcements/6.rss", track: "model/platform", country: "US", layer_hint: "midstream", authority: "official"}
     # 媒体只承担召回和交叉核验，不与公司公告混为同一证据等级。
     - name: "量子位"
       url: "https://www.qbitai.com/feed"
@@ -198,6 +199,7 @@ sources:
     - {name: "Huawei Pangu", country: "CN", url: "https://www.huaweicloud.com/intl/en-us/product/pangu.html"}
     - {name: "iFLYTEK Spark", country: "CN", url: "https://xinghuo.xfyun.cn/"}
     - {name: "SenseTime News", country: "CN", url: "https://www.sensetime.com/cn/news"}
+    - {name: "Xiaomi MiMo News", country: "CN", url: "https://mimo.mi.com/docs/en-US/news/latest"}
   # AI 编程、Agent 与多模态产品的官方更新页。
   official_product_pages:
     - {name: "Microsoft Foundry What's New", country: "US", category: "model/platform", url: "https://learn.microsoft.com/en-us/azure/ai-foundry/whats-new-foundry"}
@@ -316,7 +318,8 @@ sources:
   official_sitemaps:
     - name: "Anthropic"
       url: "https://www.anthropic.com/sitemap.xml"
-      include: ["/news/", "/research/", "/engineering/"]
+      include: ["/claude-", "/news/", "/research/", "/engineering/"]
+      probe_missing_dates: true
   github_releases:
     - "openai/codex"
     - "anthropics/claude-code"

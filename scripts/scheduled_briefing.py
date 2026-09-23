@@ -97,6 +97,23 @@ def read_json(path: Path, default: Any) -> Any:
         return default
 
 
+def parse_published_at(value: Any) -> datetime | None:
+    """Parse a source timestamp into the briefing's local time zone."""
+    value = str(value or "").strip()
+    if not value:
+        return None
+    try:
+        parsed = parsedate_to_datetime(value)
+    except (TypeError, ValueError, OverflowError):
+        try:
+            parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+        except ValueError:
+            return None
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    return parsed.astimezone(TIMEZONE)
+
+
 def report_date(now: datetime) -> str:
     return (now.astimezone(TIMEZONE).date() - timedelta(days=1)).isoformat()
 
@@ -246,24 +263,9 @@ def collect_candidates(day: str, destination: Path) -> None:
     )
     data = briefing.generate_data()
 
-    def parse_datetime(value: str) -> datetime | None:
-        value = str(value or "").strip()
-        if not value:
-            return None
-        try:
-            parsed = parsedate_to_datetime(value)
-        except (TypeError, ValueError, OverflowError):
-            try:
-                parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
-            except ValueError:
-                return None
-        if parsed.tzinfo is None:
-            parsed = parsed.replace(tzinfo=timezone.utc)
-        return parsed.astimezone(TIMEZONE)
-
     rows = []
     for row in data.get("sections", {}).get("editorial_queue", []):
-        published = parse_datetime(row.get("published_at") or row.get("time"))
+        published = parse_published_at(row.get("published_at") or row.get("time"))
         if published is None or not (window_start <= published < cutoff):
             continue
         rows.append(row)
@@ -275,6 +277,12 @@ def collect_candidates(day: str, destination: Path) -> None:
     for index, row in enumerate(rows, 1):
         candidate = dict(row)
         candidate["candidate_id"] = index
+        published = parse_published_at(
+            candidate.get("published_at") or candidate.get("time")
+        )
+        if published is not None:
+            candidate["published_at_local"] = published.isoformat()
+            candidate["published_local_date"] = published.date().isoformat()
         candidates.append(candidate)
     packet = {
         "report_date": day,
@@ -409,7 +417,7 @@ def run_selection(day: str, directory: Path, attempt: int) -> None:
     prompt = f"""You are stage 1 of an AI industry daily briefing pipeline.
 Read the fixed candidate packet at {packet}. It contains at most {MAX_CANDIDATES} candidates for report date {day}; the packet window is explicitly limited to the 48 hours ending at the report cutoff.
 {previous_context}
-Select exactly {target} candidate IDs for a verification shortlist. Judge editorially; do not use keyword scoring and do not browse the web. Cover consequential company releases and changes across foundation models, multimodal, world models, embodied AI, agents, developer products, chips, data centers, cloud/inference infrastructure, adoption, and major commercial events. Exclude academic papers and purely academic research. Prefer recent, concrete and non-duplicate events from credible sources, including strong industry media and analysis such as SemiAnalysis, not only company homepages.
+Use each candidate's `published_local_date` for date decisions; `published_at` may be UTC and its date substring is not the report's Asia/Shanghai date. Select exactly {target} candidate IDs for a verification shortlist. Judge editorially; do not use keyword scoring and do not browse the web. Cover consequential company releases and changes across foundation models, multimodal, world models, embodied AI, agents, developer products, chips, data centers, cloud/inference infrastructure, adoption, and major commercial events. A same-day first-party foundation-model, open-weight, or major API-model release belongs in the shortlist unless it is a genuine duplicate. Exclude academic papers and purely academic research. Prefer recent, concrete and non-duplicate events from credible sources, including strong industry media and analysis such as SemiAnalysis, not only company homepages.
 Prior-day items are excluded by default. Re-select an item only when the candidate clearly represents a new version, new availability, a new benchmark result, or a material new development after the prior report. Different URLs or different wording for the same event do not count as new progress.
 Exclude cryptocurrency and blockchain stories even when they mention AI. Do not use a personal profile, named-person preference, legacy personalization score, or feedback-derived preference adjustment. Judge industry significance, timeliness, source credibility, technical substance, and source diversity directly.
 Return only the requested JSON containing selected_candidate_ids. Do not write per-candidate inclusion/exclusion reasons and do not write the final briefing."""
@@ -528,7 +536,9 @@ Report date: {day} in Asia/Shanghai; the candidate window is the 48 hours ending
 
 Resume from the existing progress and draft when present. Open original sources for shortlisted candidates, verify facts and actual publication dates (not sitemap modification dates), and reject anything after the cutoff. Use other credible pages only to corroborate shortlisted events; every final item must correspond to a shortlist candidate. Update {progress} in small batches while working, preserving checked_candidate_ids and concise factual notes so a later retry can continue. Do not write long selection rationales.
 
-Choose up to {FINAL_REPORT_MAX} of the strongest verified AI INDUSTRY stories across models, multimodal, world models, embodied AI, products, agents, infrastructure, adoption and commercialization. There are no category quotas: judge the full shortlist by significance, timeliness, source credibility and technical substance. Prior-day items are excluded by default. Allow a repeated event only if the verified source shows a new version, new availability, a new benchmark result, or a material new development after the previous report; a new URL or rewritten headline alone is insufficient. Do not include academic papers or purely academic research. Write the complete final Chinese Markdown to {draft}, beginning with `# AI 工业界前沿简报 · {day}`. Under `## 本日十条行业信号`, every item must use this exact structure, including the three-space indentation:
+All report-day decisions use Asia/Shanghai. Treat a candidate's `published_local_date` as authoritative when present; never classify an ISO timestamp by its UTC date substring. For example, `2026-09-21T18:18:40Z` is 2026-09-22 in Asia/Shanghai, not a prior-day event for the 2026-09-22 report.
+
+Choose up to {FINAL_REPORT_MAX} of the strongest verified AI INDUSTRY stories across models, multimodal, world models, embodied AI, products, agents, infrastructure, adoption and commercialization. There are no category quotas: judge the full shortlist by significance, timeliness, source credibility and technical substance. Prior-day items are excluded by default. Allow a repeated event only if the verified source shows a new version, new availability, a new benchmark result, or a material new development after the previous report; a new URL or rewritten headline alone is insufficient. A material same-day first-party foundation-model, open-weight, or major API-model release must be included as a launch story when verified, unless it is a genuine duplicate of the prior report. Evaluate a release as its actual parent model when the candidate is a related checkpoint, distillation artifact or media coverage. Consult its official announcement or model collection for verification. Do not replace a shortlisted model-launch story with an allegation, controversy or unrelated claim found during corroboration: such a claim needs its own independently selected candidate. Do not include academic papers or purely academic research. Write the complete final Chinese Markdown to {draft}, beginning with `# AI 工业界前沿简报 · {day}`. Under `## 本日十条行业信号`, every item must use this exact structure, including the three-space indentation:
 Exclude cryptocurrency and blockchain stories even when they mention AI. Do not use a personal profile, named-person preference, legacy personalization score, or feedback-derived preference adjustment.
 
 1. [标题](原始链接)

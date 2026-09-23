@@ -80,7 +80,7 @@ Markdown 中的新闻标题和来源链接都可以直接点击。HTML 是不依
 - AI 编程/Agent：单独跟踪 Claude Code、Codex、Cursor、Copilot、Cognition/Devin、Replit、Manus
 - 多模态模型：单独跟踪 Runway、Stability AI、FLUX、Midjourney、Luma、Pika、Kling、Vidu
 - 补充信号：可选的 Hacker News、Hugging Face Trending、AI HOT 精选只用于发现，不会替代一手发布确认
-- 产业信号：自动抓取 NVIDIA、AMD、MLCommons、AWS、Google Cloud、Product Hunt、Crunchbase News、TechCrunch Venture、Data Center Dynamics，并把 CoreWeave、机器之心等无稳定 RSS 的入口交给 Codex 检索
+- 产业信号：自动抓取 NVIDIA、AMD、MLCommons、AWS、Google Cloud、OpenAI Developer Announcements、Product Hunt、Crunchbase News、TechCrunch Venture、Data Center Dynamics，并把 CoreWeave、机器之心等无稳定 RSS 的入口交给 Codex 检索
 - 中国优先核验：补充 36Kr、IT桔子、港交所披露等检索入口，应用采用和融资数字必须回到一手来源确认
 - 官方追踪：Anthropic sitemap，以及 Codex、Claude Code、Gemini CLI、Transformers Releases
 - 非目标内容：学术论文、纯 benchmark、加密货币与区块链资讯不进入最终日报

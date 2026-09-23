@@ -669,7 +669,13 @@ class DailyBriefingTests(unittest.TestCase):
             row["name"] for row in briefing.config["sources"]["industry_feeds"]
         }
         self.assertTrue(
-            {"NVIDIA Newsroom", "AMD Press Releases", "MLCommons", "SemiAnalysis"}
+            {
+                "NVIDIA Newsroom",
+                "AMD Press Releases",
+                "MLCommons",
+                "SemiAnalysis",
+                "OpenAI Developer Announcements",
+            }
             <= feed_names
         )
         model_pages = {
@@ -684,6 +690,7 @@ class DailyBriefingTests(unittest.TestCase):
                 "Volcano Ark Announcements",
                 "Tencent Hunyuan Product Updates",
                 "Baidu Qianfan Updates",
+                "Xiaomi MiMo News",
             }
             <= model_pages
         )
@@ -1153,6 +1160,53 @@ class DailyBriefingTests(unittest.TestCase):
         self.assertEqual(len(rows), 1)
         self.assertEqual(requested.count("https://www.qbitai.com/feed"), 2)
         self.assertEqual(requested[-1], "https://www.qbitai.com/rss")
+
+    def test_official_sitemap_prefers_newest_matching_entry(self):
+        briefing = DailyBriefing(dry_run=False, history_enabled=False)
+        briefing.config["sources"]["official_sitemaps"] = [
+            {
+                "name": "Anthropic",
+                "url": "https://example.com/sitemap.xml",
+                "include": ["/claude-"],
+            }
+        ]
+        briefing._get_content = lambda url: b"""<?xml version=\"1.0\"?>
+<urlset>
+  <url><loc>https://www.anthropic.com/claude-opus-5-4</loc><lastmod>2026-09-21T00:00:00Z</lastmod></url>
+  <url><loc>https://www.anthropic.com/claude-opus-5-5</loc><lastmod>2026-09-22T00:00:00Z</lastmod></url>
+</urlset>"""
+        briefing._within_max_age = lambda value: True
+
+        rows = briefing.fetch_official_sitemaps(limit_per_source=1)
+
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(rows[0]["title"], "claude opus 5 5")
+        self.assertEqual(rows[0]["url"], "https://www.anthropic.com/claude-opus-5-5")
+
+    def test_official_sitemap_probes_explicit_page_date_when_lastmod_missing(self):
+        briefing = DailyBriefing(dry_run=False, history_enabled=False)
+        briefing.config["sources"]["official_sitemaps"] = [
+            {
+                "name": "Anthropic",
+                "url": "https://example.com/sitemap.xml",
+                "include": ["/claude-"],
+                "probe_missing_dates": True,
+            }
+        ]
+
+        def fake_get_content(url):
+            if url.endswith("sitemap.xml"):
+                return b"""<?xml version=\"1.0\"?>
+<urlset><url><loc>https://www.anthropic.com/claude-opus-5-5</loc></url></urlset>"""
+            return b"<html><body><p>September 22, 2026</p></body></html>"
+
+        briefing._get_content = fake_get_content
+        briefing._within_max_age = lambda value: True
+
+        rows = briefing.fetch_official_sitemaps(limit_per_source=1)
+
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(rows[0]["published_at"], "2026-09-22T00:00:00+00:00")
 
     def test_industry_collection_has_no_intermediate_total_cap(self):
         briefing = DailyBriefing(dry_run=False, history_enabled=False)

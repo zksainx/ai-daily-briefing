@@ -105,6 +105,14 @@ DEFAULT_CONFIG: Dict[str, Any] = {
                 "authority": "official",
             },
             {
+                "name": "OpenAI Developer Announcements",
+                "url": "https://community.openai.com/c/announcements/6.rss",
+                "track": "model/platform",
+                "country": "US",
+                "layer_hint": "midstream",
+                "authority": "official",
+            },
+            {
                 "name": "SemiAnalysis",
                 "url": "https://newsletter.semianalysis.com/feed",
                 "track": "infrastructure",
@@ -405,7 +413,8 @@ DEFAULT_CONFIG: Dict[str, Any] = {
             {
                 "name": "Anthropic",
                 "url": "https://www.anthropic.com/sitemap.xml",
-                "include": ["/news/", "/research/", "/engineering/"],
+                "include": ["/claude-", "/news/", "/research/", "/engineering/"],
+                "probe_missing_dates": True,
             }
         ],
         "github_releases": [
@@ -2755,10 +2764,12 @@ class DailyBriefing:
             name = clean_text(source_config.get("name", "官方站点"))
             url = clean_text(source_config.get("url", ""))
             include = source_config.get("include", [])
+            probe_missing_dates = bool(source_config.get("probe_missing_dates"))
             rows: List[Dict[str, Any]] = []
             started_at = monotonic()
             try:
                 root = ElementTree.fromstring(self._get_content(url))
+                entries: List[tuple[Dict[str, str], Optional[datetime]]] = []
                 for entry in root.iter():
                     if entry.tag.rsplit("}", 1)[-1].lower() != "url":
                         continue
@@ -2774,11 +2785,24 @@ class DailyBriefing:
                         continue
                     if lastmod and not self._within_max_age(lastmod):
                         continue
+                    published = self._parse_feed_datetime(lastmod)
+                    if published is None and probe_missing_dates:
+                        published = self._extract_page_published_at(link)
+                        if published and not self._within_max_age(published.isoformat()):
+                            continue
+                    entries.append((fields, published))
+
+                entries.sort(
+                    key=lambda entry: entry[1]
+                    or datetime.min.replace(tzinfo=timezone.utc),
+                    reverse=True,
+                )
+                for fields, published in entries:
+                    link = fields.get("loc", "")
                     slug = unquote(urlsplit(link).path.rstrip("/").split("/")[-1])
                     title = clean_text(slug.replace("-", " "))
                     if not title:
                         continue
-                    published = self._parse_feed_datetime(lastmod)
                     row = {
                         "title": title,
                         "url": link,
@@ -2805,6 +2829,46 @@ class DailyBriefing:
                 )
             groups.append(rows)
         return self._round_robin(groups, sum(len(group) for group in groups))
+
+    def _extract_page_published_at(self, url: str) -> Optional[datetime]:
+        """Find an explicit publication date when a sitemap omits ``lastmod``."""
+        try:
+            soup = BeautifulSoup(self._get_content(url), "html.parser")
+        except Exception as exc:
+            self._log(f"读取 {url} 的页面日期失败: {exc}")
+            return None
+
+        for attrs in (
+            {"property": "article:published_time"},
+            {"name": "date"},
+            {"name": "publish_date"},
+            {"itemprop": "datePublished"},
+        ):
+            tag = soup.find("meta", attrs=attrs)
+            if tag and self._parse_feed_datetime(clean_text(tag.get("content", ""))):
+                return self._parse_feed_datetime(clean_text(tag.get("content", "")))
+
+        for tag in soup.find_all("time"):
+            value = clean_text(tag.get("datetime", "") or tag.get_text(" "))
+            published = self._parse_feed_datetime(value)
+            if published:
+                return published
+
+        for tag in soup.find_all(["script", "style", "noscript"]):
+            tag.decompose()
+        visible_text = soup.get_text(" ", strip=True)
+        match = re.search(
+            r"\b(?:January|February|March|April|May|June|July|August|September|October|November|December)\s+\d{1,2},\s+20\d{2}\b",
+            visible_text,
+        )
+        if not match:
+            return None
+        try:
+            return datetime.strptime(match.group(0), "%B %d, %Y").replace(
+                tzinfo=timezone.utc
+            )
+        except ValueError:
+            return None
 
     def fetch_github_releases(self) -> List[Dict[str, Any]]:
         """Track releases from the AI tools Rion actually uses."""

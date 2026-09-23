@@ -9,6 +9,15 @@ from scripts import scheduled_briefing as runner
 
 
 class ScheduledBriefingTests(unittest.TestCase):
+    def packet_window_fields(self, day):
+        start, cutoff = runner.report_window(day)
+        return {
+            "window_policy": runner.WINDOW_POLICY,
+            "window_id": runner.window_id(day),
+            "window_start": start.isoformat(),
+            "cutoff_at": cutoff.isoformat(),
+        }
+
     def test_pipeline_limits_are_loaded_from_project_config(self):
         self.assertEqual(runner.MAX_CANDIDATES, 80)
         self.assertEqual(runner.SHORTLIST_SIZE, 30)
@@ -26,6 +35,19 @@ class ScheduledBriefingTests(unittest.TestCase):
             runner.date_range("2026-09-18", "2026-09-20"),
             ["2026-09-18", "2026-09-19", "2026-09-20"],
         )
+
+    def test_latest_report_date_changes_at_0800_shanghai(self):
+        before = datetime(2026, 9, 23, 7, 59, tzinfo=runner.TIMEZONE)
+        at_cutoff = datetime(2026, 9, 23, 8, 0, tzinfo=runner.TIMEZONE)
+
+        self.assertEqual(runner.report_date(before), "2026-09-22")
+        self.assertEqual(runner.report_date(at_cutoff), "2026-09-23")
+
+    def test_report_window_is_previous_0800_to_current_0800(self):
+        start, cutoff = runner.report_window("2026-09-23")
+
+        self.assertEqual(start.isoformat(), "2026-09-22T08:00:00+08:00")
+        self.assertEqual(cutoff.isoformat(), "2026-09-23T08:00:00+08:00")
 
     def test_utc_candidate_timestamp_uses_shanghai_report_date(self):
         published = runner.parse_published_at("2026-09-21T18:18:40Z")
@@ -87,6 +109,7 @@ class ScheduledBriefingTests(unittest.TestCase):
                 json.dumps(
                     {
                         "report_date": "2026-09-18",
+                        **self.packet_window_fields("2026-09-18"),
                         "candidates": [
                             {"candidate_id": value, "title": str(value)}
                             for value in range(1, 41)
@@ -96,7 +119,12 @@ class ScheduledBriefingTests(unittest.TestCase):
                 encoding="utf-8",
             )
             selection.write_text(
-                json.dumps({"selected_candidate_ids": list(range(1, 31))}),
+                json.dumps(
+                    {
+                        "window_id": runner.window_id("2026-09-18"),
+                        "selected_candidate_ids": list(range(1, 31)),
+                    }
+                ),
                 encoding="utf-8",
             )
             self.assertTrue(runner.selection_is_valid(selection, packet))
@@ -115,6 +143,7 @@ class ScheduledBriefingTests(unittest.TestCase):
                 json.dumps(
                     {
                         "report_date": "2026-09-19",
+                        **self.packet_window_fields("2026-09-19"),
                         "candidates": [
                             {"candidate_id": value, "title": str(value)}
                             for value in range(1, 41)
@@ -141,8 +170,10 @@ class ScheduledBriefingTests(unittest.TestCase):
                         prompt = run_codex.call_args.args[1]
             finally:
                 runner.OUTPUT_ROOT = previous
-        self.assertIn("Prior-day items are excluded by default", prompt)
+        self.assertIn("already sent in the previous report are excluded", prompt)
         self.assertIn("new version, new availability", prompt)
+        self.assertIn("2026-09-18T08:00:00+08:00", prompt)
+        self.assertIn("2026-09-19T08:00:00+08:00", prompt)
 
     def test_persistent_artifacts_allow_resume_without_recollection(self):
         day = "2026-09-18"
@@ -158,18 +189,30 @@ class ScheduledBriefingTests(unittest.TestCase):
                 for value in range(1, 41)
             ]
             (directory / "candidates.json").write_text(
-                json.dumps({"report_date": day, "candidates": candidates}),
+                json.dumps(
+                    {
+                        "report_date": day,
+                        **self.packet_window_fields(day),
+                        "candidates": candidates,
+                    }
+                ),
                 encoding="utf-8",
             )
             selected = list(range(1, 31))
             (directory / "selection.json").write_text(
-                json.dumps({"selected_candidate_ids": selected}),
+                json.dumps(
+                    {
+                        "window_id": runner.window_id(day),
+                        "selected_candidate_ids": selected,
+                    }
+                ),
                 encoding="utf-8",
             )
             (directory / "shortlist.json").write_text(
                 json.dumps(
                     {
                         "report_date": day,
+                        **self.packet_window_fields(day),
                         "candidates": candidates[:30],
                     }
                 ),
@@ -179,6 +222,7 @@ class ScheduledBriefingTests(unittest.TestCase):
             def fake_verification(_day, run_directory, _attempt):
                 (run_directory / f"briefing_{day}.draft.md").write_text(
                     f"# AI 工业界前沿简报 · {day}\n\n## 本日十条行业信号\n\n"
+                    f"<!-- briefing-window: {runner.window_id(day)} -->\n\n"
                     "1. [title](https://example.com)\n"
                     "   概述：公司发布了新的企业模型。该模型已经通过 API 开放。\n\n"
                     "   技术总结：模型支持统一多模态输入。接口支持流式输出。\n\n"

@@ -24,11 +24,11 @@ With `editorial.raw_candidates: true`, do not apply topical keyword exclusions o
 
 ### Freshness and cross-day deduplication
 
-- The scheduled candidate pool is restricted to the 48 hours ending at the report-date cutoff; items without a usable publication date are not eligible for the scheduled pool.
-- Prefer events published on the report date itself.
+- The scheduled candidate pool uses the exact 24-hour Asia/Shanghai window from 08:00 on the previous calendar day (inclusive) to 08:00 on the report date (exclusive). Items without a usable publication date are not eligible for the scheduled pool.
+- Treat the report date as the date of the closing 08:00 cutoff, not the previous calendar day.
 - Read the previous sent Markdown report before selecting Top 10. Exclude previously sent events by default.
 - A repeated event is allowed only when the source shows a new version, new availability, a new benchmark result, or a material new development. A new URL or rewritten headline alone is not new progress.
-- Never include an event older than 48 hours in the scheduled report.
+- Never include an event outside that 24-hour scheduled window.
 
 ## Generate Today's Briefing
 
@@ -56,7 +56,7 @@ When invoked from an installed skill, use the absolute path to this skill's `scr
 
 2. Read every entry in `sections.editorial_queue`. It is the single candidate pool: model, product, infrastructure, adoption and commercial stories do not have separate quotas or preallocated slots. Use the Daily Selection Contract above to choose the final items. `raw_summary` contains source material for factual rewriting; do not discard it when it is terse.
 
-3. When `metadata.official_x_monitor.mode` is `codex_web_search`, execute every query in `sections.official_x_search_groups` for the X-specific 24-hour window in `metadata.official_x_monitor.lookback_hours`, even when the report-wide candidate window is 48 hours. The groups are country-aware and put China first. Retain direct `https://x.com/<handle>/status/<id>` links, add only posts published by the configured account, and keep at most the configured `collection.official_x_candidates` posts after deduplication and relevance review. Also check `sections.official_model_watchlist` and `sections.official_product_watchlist` for vendors and products that do not expose a stable feed.
+3. When `metadata.official_x_monitor.mode` is `codex_web_search`, execute every query in `sections.official_x_search_groups` for the same 24-hour scheduled window in `metadata.official_x_monitor.lookback_hours`. The groups are country-aware and put China first. Retain direct `https://x.com/<handle>/status/<id>` links, add only posts published by the configured account, and keep at most the configured `collection.official_x_candidates` posts after deduplication and relevance review. Also check `sections.official_model_watchlist` and `sections.official_product_watchlist` for vendors and products that do not expose a stable feed.
 
 4. Execute the relevant batches in `sections.industry_search_groups`, starting with China. Use `sections.industry_source_watchlist` to return to company newsrooms, customer announcements, investors, exchanges, or regulatory filings. Discovery-only media and community sources may surface a lead, but they cannot confirm funding amounts, adoption figures, revenue, valuation, or infrastructure spending on their own.
 

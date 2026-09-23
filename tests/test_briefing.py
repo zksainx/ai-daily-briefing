@@ -5,7 +5,7 @@ import sqlite3
 import subprocess
 import tempfile
 import unittest
-from contextlib import redirect_stderr, redirect_stdout
+from contextlib import closing, redirect_stderr, redirect_stdout
 from datetime import datetime, timedelta, timezone
 from io import StringIO
 from pathlib import Path
@@ -815,6 +815,40 @@ class DailyBriefingTests(unittest.TestCase):
         self.assertEqual(
             payload["metadata"]["official_x_monitor"]["max_results_per_request"],
             10,
+        )
+
+    def test_requested_window_uses_report_cutoff_for_recovery_runs(self):
+        cutoff = datetime(2026, 9, 23, 8, 0, tzinfo=timezone(timedelta(hours=8)))
+        briefing = DailyBriefing(
+            dry_run=True,
+            lookback_hours=24,
+            report_cutoff=cutoff,
+        )
+
+        self.assertTrue(
+            briefing._within_requested_window(
+                {"published_at": "2026-09-22T00:00:00Z"}
+            )
+        )
+        self.assertFalse(
+            briefing._within_requested_window(
+                {"published_at": "2026-09-21T23:59:59Z"}
+            )
+        )
+        self.assertTrue(
+            briefing._within_requested_window(
+                {"published_at": "2026-09-22T23:59:59Z"}
+            )
+        )
+        self.assertFalse(
+            briefing._within_requested_window(
+                {"published_at": "2026-09-23T00:00:00Z"}
+            )
+        )
+        self.assertFalse(
+            briefing._within_requested_window(
+                {"published_at": "2026-09-23T00:00:01Z"}
+            )
         )
 
     def test_official_x_uses_exact_report_cutoff_window(self):
@@ -1756,7 +1790,7 @@ class DailyBriefingTests(unittest.TestCase):
     def test_existing_history_database_is_migrated_in_place(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             path = Path(tmpdir) / "legacy.sqlite3"
-            with sqlite3.connect(path) as connection:
+            with closing(sqlite3.connect(path)) as connection, connection:
                 connection.execute(
                     """
                     CREATE TABLE items (
@@ -1777,7 +1811,7 @@ class DailyBriefingTests(unittest.TestCase):
 
             BriefingStore(str(path))
 
-            with sqlite3.connect(path) as connection:
+            with closing(sqlite3.connect(path)) as connection, connection:
                 item_columns = {
                     row[1] for row in connection.execute("PRAGMA table_info(items)")
                 }

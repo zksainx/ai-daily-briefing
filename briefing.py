@@ -825,6 +825,13 @@ class DailyBriefing:
                 database = self.config_path.parent / database
             self.history_store = BriefingStore(str(database))
 
+    def _reference_time_utc(self) -> datetime:
+        """Use the report cutoff for reproducible historical recovery runs."""
+        reference = self.report_cutoff or datetime.now(timezone.utc)
+        if reference.tzinfo is None:
+            reference = reference.replace(tzinfo=timezone.utc)
+        return reference.astimezone(timezone.utc)
+
     def _load_config(self, config_path: Path) -> Dict[str, Any]:
         config = deepcopy(DEFAULT_CONFIG)
         if not config_path.exists():
@@ -949,8 +956,9 @@ class DailyBriefing:
             published = self._parse_feed_datetime(clean_text(item.get("time", "")))
         if published is None:
             return clean_text(item.get("time", "")) in {"今日", "刚刚", "示例数据"}
-        age = datetime.now(timezone.utc) - published.astimezone(timezone.utc)
-        return 0 <= age.total_seconds() <= self.lookback_hours * 3600
+        window_end = self.report_cutoff or datetime.now(timezone.utc)
+        age = window_end.astimezone(timezone.utc) - published.astimezone(timezone.utc)
+        return 0 < age.total_seconds() <= self.lookback_hours * 3600
 
     def _focus_keywords(self) -> List[str]:
         if not self.focus:
@@ -1132,7 +1140,8 @@ class DailyBriefing:
             published_at = self._parse_feed_datetime(published_raw)
             if published_at and max_age_days > 0:
                 age_seconds = (
-                    datetime.now(timezone.utc) - published_at.astimezone(timezone.utc)
+                    self._reference_time_utc()
+                    - published_at.astimezone(timezone.utc)
                 ).total_seconds()
                 if age_seconds > max_age_days * 86400:
                     continue
@@ -1445,7 +1454,7 @@ class DailyBriefing:
         )
         if published_at is None or max_age_days <= 0:
             return True
-        age = datetime.now(timezone.utc) - published_at.astimezone(timezone.utc)
+        age = self._reference_time_utc() - published_at.astimezone(timezone.utc)
         return age.total_seconds() <= max_age_days * 86400
 
     def _official_ai_source_names(self) -> set[str]:
@@ -1947,7 +1956,7 @@ class DailyBriefing:
         )
         if published_at is None or max_age_days <= 0:
             return True
-        age = datetime.now(timezone.utc) - published_at.astimezone(timezone.utc)
+        age = self._reference_time_utc() - published_at.astimezone(timezone.utc)
         return age.total_seconds() <= max_age_days * 86400
 
     def fetch_hacker_news(self, limit: Optional[int] = None) -> List[Dict[str, Any]]:
@@ -1963,7 +1972,7 @@ class DailyBriefing:
         lookback_hours = int(source_config.get("lookback_hours", 96))
         min_points = int(source_config.get("min_points", 20))
         created_after = int(
-            (datetime.now(timezone.utc) - timedelta(hours=lookback_hours)).timestamp()
+            (self._reference_time_utc() - timedelta(hours=lookback_hours)).timestamp()
         )
         rows: List[Dict[str, Any]] = []
         started_at = monotonic()
@@ -3635,7 +3644,7 @@ class DailyBriefing:
         age_days = max(
             0.0,
             (
-                datetime.now(timezone.utc) - published_at.astimezone(timezone.utc)
+                self._reference_time_utc() - published_at.astimezone(timezone.utc)
             ).total_seconds()
             / 86400,
         )
@@ -5027,7 +5036,7 @@ class DailyBriefing:
                 "editorial_instructions": [
                     "原始候选不按关键词筛选。编辑须逐条阅读全部候选，在内部判断其与用户关注方向的相关性、事实依据、时效和产业影响，再选出最多十条。这里的判断/投票由当前编辑 Agent 完成，不代表多个独立模型投票；入选或不入选理由只保留在临时推理记录，不写入最终 Top 10。原始抓取包不等于最终简报；focus 和 mode 的语义边界由编辑执行。",
                     "只保留能核验的事实和原始链接，不补写来源中没有的数字。",
-                    f"先阅读 sections.editorial_queue 中最多 {candidate_pool_max} 条候选，再由编辑 Agent 独立选择最终最多 {final_report_max} 条；模型、产品、基础设施、应用和商业事件没有类别配额，也不得直接照搬规则评分排序。定时日报候选池只包含报告截止前 48 小时且有明确发布日期的内容，优先当天发布；前一天已经发送过的事件默认排除，只有新版本、新可用性、新基准或重大进展才允许重复。优先实质发布、生产部署、产业影响和跨层代表性，压低奖项、营销稿、重复版本和泛案例文章。",
+                    f"先阅读 sections.editorial_queue 中最多 {candidate_pool_max} 条候选，再由编辑 Agent 独立选择最终最多 {final_report_max} 条；模型、产品、基础设施、应用和商业事件没有类别配额，也不得直接照搬规则评分排序。定时日报候选池使用北京时间前一日 08:00（含）至当日 08:00（不含）的 24 小时窗口；上一份日报已经发送过的事件默认排除，只有新版本、新可用性、新基准或重大进展才允许重复。优先实质发布、生产部署、产业影响和跨层代表性，压低奖项、营销稿、重复版本和泛案例文章。",
                     f"最终不足 {final_report_max} 条时如实少报，不用旧闻、低可信媒体转述或无实质变化的内容填充数量。",
                     "当前简报聚焦 AI 工业界：不把 arXiv、论文、学术会议或纯理论研究编入成品；模型、产品、基础设施和商业事件优先引用公司公告、模型卡、Changelog、Release 或可核验披露。",
                     "优先选择新变化、多源印证、官方更新和可转成内容或商业动作的信号。",

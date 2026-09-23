@@ -357,7 +357,8 @@ request:
   timeout: 10
   user_agent: "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Safari/537.36"
 
-# 内容质量控制：定时日报只采集报告截止前 48 小时，并合并同一事件的重复报道。
+# 内容质量控制：定时日报由 runner 使用北京时间 08:00 截止的 24 小时窗口；
+# 这里的天数上限用于各来源自身抓取时的宽松预取，最终仍由 runner 精确截窗。
 quality:
   max_feed_age_days: 2
   model_release_max_age_days: 2

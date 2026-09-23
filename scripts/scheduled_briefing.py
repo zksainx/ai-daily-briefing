@@ -678,7 +678,7 @@ def process_day(day: str, now: datetime, *, no_send: bool = False) -> str:
     shortlist = directory / "shortlist.json"
     draft = directory / f"briefing_{day}.draft.md"
 
-    if state.get("status") == "email_complete":
+    if state.get("status") in {"email_complete", "skipped"}:
         return "complete"
 
     stages = (

@@ -100,6 +100,24 @@ class ScheduledBriefingTests(unittest.TestCase):
 
         self.assertEqual(processed, ["2026-09-22", "2026-09-23"])
 
+    def test_explicitly_skipped_day_is_not_resumed(self):
+        day = "2026-09-23"
+        now = datetime(2026, 9, 23, 12, 0, tzinfo=runner.TIMEZONE)
+        with tempfile.TemporaryDirectory() as tmpdir, patch.object(
+            runner, "STATE_ROOT", Path(tmpdir)
+        ):
+            directory = Path(tmpdir) / day
+            directory.mkdir(parents=True)
+            (directory / "run-state.json").write_text(
+                json.dumps({"report_date": day, "status": "skipped", "stages": {}}),
+                encoding="utf-8",
+            )
+            with patch.object(runner, "collect_candidates") as collect:
+                result = runner.process_day(day, now, no_send=False)
+
+        self.assertEqual(result, "complete")
+        collect.assert_not_called()
+
     def test_selection_requires_exactly_30_unique_known_ids(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             directory = Path(tmpdir)

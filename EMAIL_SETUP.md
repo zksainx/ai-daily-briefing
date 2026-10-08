@@ -70,6 +70,6 @@ security add-generic-password -U \
 
 日报编辑通过 `codex exec --model gpt-5.6-terra -c 'model_reasoning_effort="xhigh"'` 固定模型和推理强度，不随全局默认模型变化。
 
-`scripts/scheduled_briefing.py` 已在日报发布后调用邮件发送器。启动时会从 2026-09-18 起检查缺失日期，并优先补做最早的未完成日报。运行状态位于 `~/Library/Application Support/ai-daily-briefing/runs/YYYY-MM-DD/`，候选包不会再放入临时目录。
+`scripts/scheduled_briefing.py` 已在日报发布后调用邮件发送器。自动运行只处理当天报告：08:00 后的重试仅继续当天任务，不扫描或补做历史缺失日期；历史日期只有在人工传入 `--report-date YYYY-MM-DD` 时才会处理。运行状态位于 `~/Library/Application Support/ai-daily-briefing/runs/YYYY-MM-DD/`，候选包不会再放入临时目录。
 
-LaunchAgent `com.kxzhang.ai-briefing-email-daily` 每天北京时间 08:00 启动日报，并每 1 小时执行一次轻量恢复检查。报告日期按窗口结束日命名，采集范围为前一日 08:00（含）至当日 08:00（不含）。没有缺失任务时检查会立即退出；发生失败时会在状态文件允许重试后的下一次小时检查中补跑。它长期生效，没有结束日期。08:00 是任务启动时间，实际邮件会在采集、两阶段筛选和核验完成后送达。
+LaunchAgent `com.kxzhang.ai-briefing-email-daily` 每天北京时间 08:00 启动日报，并每 1 小时执行一次轻量恢复检查。报告日期按窗口结束日命名，采集范围为前一日 08:00（含）至当日 08:00（不含）。08:00–23:59 的恢复检查只处理当天报告；00:00–07:59 直接退出，不再重试前一天或更早的任务。它长期生效，没有结束日期。08:00 是任务启动时间，实际邮件会在采集、两阶段筛选和核验完成后送达。

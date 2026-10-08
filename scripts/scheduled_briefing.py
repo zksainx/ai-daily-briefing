@@ -125,6 +125,14 @@ def report_date(now: datetime) -> str:
     return latest.isoformat()
 
 
+def scheduled_report_date(now: datetime) -> str | None:
+    """Return today's report only after its 08:00 cutoff has closed."""
+    local_now = now.astimezone(TIMEZONE)
+    if local_now.timetz().replace(tzinfo=None) < REPORT_CUTOFF_TIME:
+        return None
+    return local_now.date().isoformat()
+
+
 def report_window(day: str) -> tuple[datetime, datetime]:
     cutoff = datetime.combine(date.fromisoformat(day), REPORT_CUTOFF_TIME, TIMEZONE)
     return cutoff - timedelta(hours=REPORT_WINDOW_HOURS), cutoff
@@ -803,7 +811,7 @@ def main() -> int:
         "--check", action="store_true", help="Print recovery state without running"
     )
     parser.add_argument(
-        "--report-date", help="Process one explicit date instead of the backlog"
+        "--report-date", help="Manually process one explicit report date"
     )
     parser.add_argument(
         "--no-send", action="store_true", help="Generate Markdown without email"
@@ -824,19 +832,21 @@ def main() -> int:
             print("Another briefing run is active; exiting.")
             return 0
 
-        days = (
-            [args.report_date]
-            if args.report_date
-            else date_range(START_DATE, report_date(now))
-        )
+        if args.report_date:
+            days = [args.report_date]
+        else:
+            today = scheduled_report_date(now)
+            if today is None:
+                print("Today's 08:00 report cutoff has not closed; nothing to run.")
+                return 0
+            days = [today]
         exit_code = 0
         for day in days:
             result = process_day(day, datetime.now(TIMEZONE), no_send=args.no_send)
             print(f"{day}: {result}", flush=True)
             if result == "failed":
-                # An old email retry must not prevent newer reports from being
-                # generated and delivered. The failed date retains its state
-                # and will be retried on a later LaunchAgent invocation.
+                # Keep resumable state, but automatic retries stop when the
+                # local calendar date changes.
                 exit_code = 1
         return exit_code
 

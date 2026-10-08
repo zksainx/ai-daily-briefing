@@ -43,6 +43,13 @@ class ScheduledBriefingTests(unittest.TestCase):
         self.assertEqual(runner.report_date(before), "2026-09-22")
         self.assertEqual(runner.report_date(at_cutoff), "2026-09-23")
 
+    def test_scheduled_report_only_runs_for_current_date_after_0800(self):
+        before = datetime(2026, 9, 23, 7, 59, tzinfo=runner.TIMEZONE)
+        at_cutoff = datetime(2026, 9, 23, 8, 0, tzinfo=runner.TIMEZONE)
+
+        self.assertIsNone(runner.scheduled_report_date(before))
+        self.assertEqual(runner.scheduled_report_date(at_cutoff), "2026-09-23")
+
     def test_report_window_is_previous_0800_to_current_0800(self):
         start, cutoff = runner.report_window("2026-09-23")
 
@@ -82,23 +89,40 @@ class ScheduledBriefingTests(unittest.TestCase):
             self.assertNotIn("next_retry_at", stage)
             self.assertEqual(stage["exhausted_for_day"], "2026-09-19")
 
-    def test_backlog_continues_after_an_older_day_fails(self):
+    def test_automatic_run_processes_only_current_report_date(self):
         processed = []
 
         def fake_process(day, now, *, no_send):
             processed.append(day)
-            return "failed" if day == "2026-09-22" else "complete"
+            return "complete"
 
         with tempfile.TemporaryDirectory() as tmpdir, patch.object(
             runner, "LOG_ROOT", Path(tmpdir)
         ), patch.object(
-            runner, "date_range", return_value=["2026-09-22", "2026-09-23"]
-        ), patch.object(runner, "process_day", side_effect=fake_process), patch(
-            "sys.argv", ["scheduled_briefing.py"]
-        ):
-            self.assertEqual(runner.main(), 1)
+            runner,
+            "datetime",
+        ) as mocked_datetime, patch.object(
+            runner, "process_day", side_effect=fake_process
+        ), patch("sys.argv", ["scheduled_briefing.py"]):
+            mocked_datetime.now.return_value = datetime(
+                2026, 9, 23, 12, 0, tzinfo=runner.TIMEZONE
+            )
+            self.assertEqual(runner.main(), 0)
 
-        self.assertEqual(processed, ["2026-09-22", "2026-09-23"])
+        self.assertEqual(processed, ["2026-09-23"])
+
+    def test_automatic_run_before_cutoff_does_nothing(self):
+        with tempfile.TemporaryDirectory() as tmpdir, patch.object(
+            runner, "LOG_ROOT", Path(tmpdir)
+        ), patch.object(runner, "datetime") as mocked_datetime, patch.object(
+            runner, "process_day"
+        ) as process, patch("sys.argv", ["scheduled_briefing.py"]):
+            mocked_datetime.now.return_value = datetime(
+                2026, 9, 23, 7, 0, tzinfo=runner.TIMEZONE
+            )
+            self.assertEqual(runner.main(), 0)
+
+        process.assert_not_called()
 
     def test_explicitly_skipped_day_is_not_resumed(self):
         day = "2026-09-23"

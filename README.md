@@ -216,7 +216,7 @@ python briefing.py --editorial-packet --no-save
 # 手工保存候选包
 python briefing.py --editorial-packet --output-file outputs/editorial_packet.json
 
-# 查看定时任务的缺失日期和恢复状态
+# 查看各日期已有状态（不会触发历史补做）
 .venv/bin/python scripts/scheduled_briefing.py --check
 
 # 检查 Codex 精编后的每条链接是否紧跟具体中文概括

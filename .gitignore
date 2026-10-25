@@ -39,7 +39,18 @@ Thumbs.db
 briefing_*.txt
 briefing_*.json
 briefing_*.md
+briefing_*.html
+candidates_*.txt
+candidates_*.json
+candidates_*.md
+candidates_*.html
+editorial_packet*.json
+weekly_review_*.txt
+weekly_review_*.json
+weekly_review_*.md
+weekly_review_*.html
 outputs/
+reports/
 data/*.sqlite3
 data/*.sqlite3-*
 

@@ -1,441 +1,124 @@
-<p align="center">
-  <strong>简体中文</strong> | <a href="./README_EN.md">English</a>
-</p>
+# AI 前沿日报
 
-# AI 工业界前沿简报
+[中文](README.md) | [English](README_EN.md)
 
-面向课程汇报、组会和行业观察的 AI 工业界情报系统。默认只收集可核验的业界事件：模型与能力发布、产品和平台更新、AI 基础设施、产业采用及重大商业事件；覆盖国内外知名 AI 公司。每日生成带可点击出处的 Markdown/HTML，按周沉淀为可打印 PDF 的复盘。
+面向国内外 AI 工业界的中文邮件日报，覆盖模型、多模态、世界模型、具身智能、Agent、产品、基础设施和商业进展；不收录纯学术或 Web3 内容。
 
-> **默认边界：不收 arXiv、论文、学术会议、纯 benchmark、加密货币/区块链资讯或无来源的社区传闻。官方公告、模型卡、Release Notes、Changelog 与官方工程更新优先；媒体和社区只作发现或佐证。**
-
-## 两种输出格式
-
-同一份简报会交付可点击的 Markdown 长文和可搜索、筛选、收藏的交互 HTML。HTML 是单文件，手机和桌面浏览器都能直接打开。
-
-<table>
-  <tr>
-    <th width="50%">Markdown 长文</th>
-    <th width="50%">交互 HTML</th>
-  </tr>
-  <tr>
-    <td><img src="docs/assets/markdown-briefing-preview.png" alt="AI Daily Briefing Markdown 长文预览"></td>
-    <td><img src="docs/assets/html-briefing-preview.png" alt="AI Daily Briefing 交互 HTML 界面预览"></td>
-  </tr>
-</table>
-
-## Codex 直接调用（推荐）
-
-先克隆项目并安装仓库内置的 Codex Skill：
-
-```bash
-git clone https://github.com/Rion-Wu-tech/ai-daily-briefing.git
-cd ai-daily-briefing
-./scripts/install-codex-skill.sh
-```
-
-重新打开一个 Codex 任务后，直接输入：
+## 项目架构
 
 ```text
-$daily-briefing 生成今日早报
+ai-daily-briefing/
+├── ai_daily_briefing/        # Python 业务包
+│   ├── __main__.py          # 采集命令入口：python -m ai_daily_briefing
+│   ├── collector.py         # 多源采集、规范化、时间过滤、去重、候选包
+│   ├── workflow.py          # 两阶段编辑、核验、断点恢复、发布与发送
+│   ├── delivery.py          # 邮件预览和发送命令
+│   ├── email.py             # 邮件正文渲染、SMTP、收件人与发送账本
+│   ├── store.py             # SQLite 历史与来源健康记录
+│   ├── retention.py         # 仓库内日期报告的 30 天保留规则
+│   └── html.py              # 按需生成独立 HTML，定时邮件流程不使用
+├── scripts/                 # 启动脚本与 skill 安装器
+├── skills/daily-briefing/    # 编辑规则、候选采集助手、Markdown 校验
+├── tests/                   # 单元测试与命令入口测试
+├── email/                   # SMTP 配置模板、收件人模板及本机名单
+├── outputs/                 # 最终 Markdown 报告，不进入 Git
+├── config.yaml              # 来源、采集限流、80→30→10、保留天数
+├── requirements.txt
+├── EMAIL_SETUP.md           # SMTP 与邮件使用说明
+└── .github/workflows/       # CI 验证
 ```
 
-也可以直接指定范围：
+数据流：来源 → 原始候选包（最多 80 条）→ Codex 短名单（最多 30 条）→ 核验与 Top 10 → Markdown → 邮件正文 → 逐人发送并记账。
 
-```text
-$daily-briefing 检索过去 48 小时 AI 赛道爆火热点
-$daily-briefing 检索最近 24 小时最新模型发布，只看官方来源
-$daily-briefing 生成过去 24 小时 AI 全产业链简报
-$daily-briefing 查看最近 7 天 AI 应用落地和投融资
-$daily-briefing 生成本周简报复盘
-```
+业务代码统一在包内，`scripts/scheduled_briefing.py` 和 `scripts/send_briefing_email.py` 是薄启动入口。现有 LaunchAgent 继续调用前者，无需因目录整理而更换路径。
 
-Codex 会自动完成抓取、去重、评分和二次精编，最终生成：
+## 安装与验证
 
-```text
-outputs/briefing_YYYY-MM-DD.md
-outputs/briefing_YYYY-MM-DD.html
-```
+需要 Python 3.11+。完整编辑流程还需要已安装、已登录且可用的 Codex CLI；邮件发送需要 SMTP 配置。
 
-Markdown 中的新闻标题和来源链接都可以直接点击。HTML 是不依赖服务器和外部 CDN 的单文件阅读器，支持搜索、栏目导航、可信度与产业层筛选、本地收藏、深浅主题、Markdown 下载及打印/PDF。Python 模板负责稳定抓取和兜底，当前 Codex 模型负责最终选稿、中文解释、栏目编排与 X 草稿。
-
-已有同名 Skill 时，显式备份并替换：
-
-```bash
-./scripts/install-codex-skill.sh --force
-```
-
-## 功能
-
-- AI 工业界动态：国内外模型公司、云厂商、基础设施公司与 AI 产品公司的可核验更新
-- 最新模型发布：独立追踪厂商官网、官方 Changelog、官方模型卡与开源权重首发
-- 产品与工具更新：跟踪 AI 产品、新功能、API、价格、工作流与重要集成，不要求必须伴随新模型
-- AI 产业链全景：按上游算力与基础设施、中游模型与平台、下游应用与服务组织信号
-- 应用层趋势：补充客户采用、用户增长、行业落地、定价、收入和真实商业化证据
-- AI 投融资：独立跟踪融资、并购、IPO 和财报，并标注关键数字是否经过官方或多源核验
-- 产业链联动：连接跨层共同主题，同时明确区分“主题关联”和真实合作或因果关系
-- 重要行业信号：从公司公告、产品发布、官方工程更新、重大融资并购和可信媒体报道中筛选
-- 官方模型组织：42 个官方 Hugging Face 组织，重点覆盖中美活跃模型团队
-- 官方发布页：19 个基础模型发布页 + 38 个 AI 编程、Agent、多模态和模型平台更新页
-- 官方账号雷达：62 个模型公司与 AI 产品 X 官方账号；Codex 可直接检索，配置 X API 后 Python 也能自动抓取
-- AI 编程/Agent：单独跟踪 Claude Code、Codex、Cursor、Copilot、Cognition/Devin、Replit、Manus
-- 多模态模型：单独跟踪 Runway、Stability AI、FLUX、Midjourney、Luma、Pika、Kling、Vidu
-- 补充信号：可选的 Hacker News、Hugging Face Trending、AI HOT 精选只用于发现，不会替代一手发布确认
-- 产业信号：自动抓取 NVIDIA、AMD、MLCommons、AWS、Google Cloud、OpenAI Developer Announcements、Product Hunt、Crunchbase News、TechCrunch Venture、Data Center Dynamics，并把 CoreWeave、机器之心等无稳定 RSS 的入口交给 Codex 检索
-- 中国优先核验：补充 36Kr、IT桔子、港交所披露等检索入口，应用采用和融资数字必须回到一手来源确认
-- 官方追踪：Anthropic sitemap，以及 Codex、Claude Code、Gemini CLI、Transformers Releases
-- 非目标内容：学术论文、纯 benchmark、加密货币与区块链资讯不进入最终日报
-- GitHub 优质项目：GitHub Trending
-- 每日十条行业信号：优先展示模型、产品、基础设施和产业化的真正变化
-- 定时日报 freshness：每天北京时间 08:00 启动，候选只取前一日 08:00（含）至当日 08:00（不含）；上一份日报已发送事件默认排除，只有新版本、新可用性、新基准或重大进展才允许重复
-- Codex 友好：支持 `--dry-run` 离线验证、单元测试和稳定输出目录
-- 每条新闻/项目的可点击标题下都会紧跟 1 至 2 句具体中文概括，说明谁做了什么、关键结果或影响；不写空泛模板，也不额外加“摘要”等标签
-- Codex 保存早报后会运行 Markdown 质检器，自动拦截缺少中文概括、只有评分/来源或命中空泛模板的条目
-- 开头自动生成 `本日十条行业信号`，再按模型、产品/Agent、产业链、采用/商业化、资本事件和持续观察展开
-- 最终 Top 10 由 Codex 根据产业重要性、时效、来源可信度、技术含量和来源多样性判断；不使用个人画像或旧版个性化分数
-- 可信度区分 `官方确认`、`多源印证`、`单源信号`
-- X 草稿覆盖单帖、thread、视觉/视频脚本三种形态
-- SQLite 记录首次出现、最后出现、重复次数、来源数和每日排名；同一天重复运行不会重复计数
-- 可记录 `阅读 / 收藏 / 写稿 / 已发布 / 没价值`，后续排序会小幅学习你的真实选择
-- 每次真实抓取记录来源成功率、条目数和耗时，可生成 7 天来源健康报告
-- 自动生成周复盘：持续信号、内容反馈、偏好类别、来源健康度和下周动作
-- `--editorial-packet` 生成 Codex 精编包，由当前 Codex 模型做最终选稿和中文改写；Python 模板始终作为确定性兜底
-- 仓库内置标准 Codex Skill、UI 元数据和便携 runner；可以从 Codex 直接调用并落盘 Markdown
-- Codex 精编 Markdown 通过质检后会生成同名交互 HTML；手工修改过的 Markdown 也可单独重新渲染
-- 自动过滤 AI 板块跑题内容，并合并同一链接或相似标题的重复报道
-- 媒体与官方源交替混排，单个来源失败时保留其他可用板块
-- 早报结尾自动生成简短的中英双语 Star 引导，并保留唯一的官方仓库链接
-
-### 两维情报模型
-
-每条信息同时回答两个问题：
-
-- `industry_layer`：公司或产品位于上游、中游还是下游
-- `event_types`：这次发生了模型发布、产品更新、采用增长、融资、并购、财报还是政策变化
-
-资本不是产业链的“第四层”。例如，一家 AI 工作流公司完成融资后，仍属于下游应用，只是同时带有 `funding` 事件。这样既能看清整条产业链，也不会让融资新闻挤掉产品和应用信号。
-
-## 当前官方覆盖
-
-| 区域 | 模型组织/发布源 | X 官方账号 |
-| --- | --- | --- |
-| 美国 | OpenAI、Anthropic/Claude、Google DeepMind、Meta AI/Llama、xAI/Grok、Microsoft AI/Phi、NVIDIA、Ai2、Amazon Nova、Perplexity、IBM Granite、Salesforce、Snowflake、Liquid AI、Nous Research、Cerebras、Prime Intellect、Inception、Stability AI、Black Forest Labs | `@OpenAI`、`@AnthropicAI`、`@claudeai`、`@GoogleDeepMind`、`@AIatMeta`、`@SpaceXAI`、`@grok`、`@MicrosoftAI`、`@NVIDIAAI`、`@allen_ai`、`@AWSCloud`、`@perplexity_ai`、`@IBMResearch`、`@SalesforceDevs`、`@SnowflakeDB`、`@LiquidAI`、`@NousResearch`、`@Cerebras`、`@PrimeIntellect`、`@_inception_ai`、`@StabilityAI`、`@bfl_ai` |
-| 中国 | Qwen、DeepSeek、Z.ai/GLM、Kimi、MiniMax、腾讯混元、字节 Seed、阶跃星辰、百川、01.AI、小米 MiMo、InternLM、百度文心、华为盘古、讯飞星火、商汤日日新、美团 LongCat、快手 Kolors、OpenBMB/MiniCPM、OpenGVLab/InternVL、BAAI、Ant Ling、Wan、Skywork | `@Alibaba_Qwen`、`@deepseek_ai`、`@Zai_org`、`@Kimi_Moonshot`、`@MiniMax_AI`、`@StepFun_ai`、`@ByteDanceSeed`、`@TencentHunyuan`、`@Baidu_Inc`、`@01AI_Yi`、`@BaichuanAI`、`@HuaweiCloud1`、`@SenseTimeGroup`、`@Meituan_LongCat`、`@OpenBMB`、`@BAAIBeijing`、`@AntLingAGI`、`@Alibaba_Wan`、`@Skywork_ai` |
-| 其他 | Mistral AI、Cohere Labs | `@MistralAI`、`@cohere` |
-
-| 产品方向 | 官方发布源 | X 官方账号 |
-| --- | --- | --- |
-| AI 编程/Agent | Claude Code、OpenAI Codex、Cursor、GitHub Copilot、Cognition/Devin、Replit、Manus | `@claudeai`、`@OpenAI`、`@cursor_ai`、`@GitHubCopilot`、`@cognition_labs`、`@Replit`、`@ManusAI` |
-| 多模态模型 | Runway、Stability AI、Black Forest Labs/FLUX、Midjourney、Ideogram、Luma、Pika、Adobe Firefly、Kling、Vidu、Wan | `@runwayml`、`@StabilityAI`、`@bfl_ai`、`@midjourney`、`@ideogram_ai`、`@LumaLabsAI`、`@pika_labs`、`@AdobeFirefly`、`@Kling_ai`、`@ViduAI_official`、`@Alibaba_Wan` |
-| 音频/音乐模型 | ElevenLabs、Suno | `@ElevenLabs`、`@suno_ai_` |
-| 模型平台/生态 | Hugging Face、OpenRouter、Together AI、Snowflake Cortex、Salesforce AI | `@huggingface`、`@OpenRouter`、`@togethercompute`、`@SnowflakeDB`、`@SalesforceDevs` |
-
-官网、Changelog 和模型卡用于确认事实；X 用于捕捉首发、预告、API/价格变更和产品动态。交互式完整精编在没有 X API 时仍可读取账号清单进行联网检索；两阶段定时邮件为了固定候选包和可恢复性，不依赖该回退，需配置 Bearer Token 才会稳定采集 X。
-
-若希望本地 Python 和 LaunchAgent 自动抓取全部官方账号，macOS 推荐把 Bearer Token 存入 Keychain。下面的命令会安全地在终端中提示输入 Token：
-
-```bash
-security add-generic-password -U \
-  -a "x-api" \
-  -s "ai-daily-briefing-x-bearer" \
-  -w
-```
-
-程序会自动读取该 Keychain 项，无需把 Token 写进 `config.yaml`、LaunchAgent plist 或仓库。`X_BEARER_TOKEN` 环境变量仍可用于临时测试，并优先于 Keychain。
-
-## 快速开始
-
-```bash
-git clone https://github.com/Rion-Wu-tech/ai-daily-briefing.git
-cd ai-daily-briefing
-
-python3 -m venv .venv
-source .venv/bin/activate
-python -m pip install -r requirements.txt
-```
-
-先跑离线验证：
-
-```bash
-python briefing.py --dry-run --no-save
-python -m unittest discover -s tests
-```
-
-真实抓取并保存 Markdown 简报，标题链接可点击，每条后面跟一行简短中文解释：
-
-```bash
-python briefing.py
-```
-
-默认输出到：
-
-```text
-outputs/briefing_YYYY-MM-DD.md
-```
-
-## 本地 Python 运行
-
-不安装 Codex Skill 也可以独立运行：
+在仓库根目录执行：
 
 ```bash
 python3 -m venv .venv
-source .venv/bin/activate
-python -m pip install -r requirements.txt
-python briefing.py --dry-run --no-save
-python -m unittest discover -s tests
+.venv/bin/python -m pip install -r requirements.txt
+
+# 离线样例，不联网、不保存、不发送
+.venv/bin/python -m ai_daily_briefing --dry-run --no-save
+
+# 编译与测试
+.venv/bin/python -m compileall -q ai_daily_briefing scripts
+.venv/bin/python -m unittest discover -s tests
 ```
 
-如果 dry-run 和测试都通过，再跑真实抓取并保存 Markdown：
+旧的 `python briefing.py` 已替换为 `python -m ai_daily_briefing`。采集器输出是原始候选，不是最终精编日报。
+
+## 使用方式
+
+### 采集与生成
 
 ```bash
-python briefing.py
+# 仅联网采集，输出 JSON 候选包到终端，不保存、不发送
+.venv/bin/python -m ai_daily_briefing --editorial-packet --no-save
+
+# 查看运行状态，不生成、不发送、不清理
+.venv/bin/python -m ai_daily_briefing.workflow --check
+
+# 生成或恢复当天任务；完成后向当前收件人名单发送
+.venv/bin/python -m ai_daily_briefing.workflow
+
+# 生成或恢复当天任务，不发送邮件
+.venv/bin/python -m ai_daily_briefing.workflow --no-send
+
+# 只清理过期报告
+.venv/bin/python -m ai_daily_briefing.workflow --cleanup-only
 ```
 
-更完整的 agent 运行说明见 [CODEX.md](./CODEX.md)。
+只有明确要处理历史日期时才传 `--report-date YYYY-MM-DD`。已完成的任务会跳过；这些命令不强制重新生成或重发。
 
-## 常用命令
+来源与数量配置在 [config.yaml](config.yaml)。Codex 可执行文件默认从 PATH 查找，可通过 `BRIEFING_CODEX` 指定路径。编辑模型固定为 `gpt-6.1-sol`，思考深度为 `high`。
+
+### 邮件预览
+
+将日期替换为已有报告的日期：
 
 ```bash
-# 离线样例数据，不访问外部网站
-python briefing.py --dry-run
-
-# 输出纯文本
-python briefing.py --format text
-
-# 输出 JSON，只打印不保存
-python briefing.py --format json --no-save
-
-# 直接从结构化数据生成交互 HTML
-python briefing.py --format html
-
-# 把 Codex 精编或手工修改后的 Markdown 转成交互 HTML
-python skills/daily-briefing/scripts/render-briefing-html.py outputs/briefing_YYYY-MM-DD.md
-
-# 手工预览采集最多 80 条候选，不落盘
-python briefing.py --editorial-packet --no-save
-
-# 手工保存候选包
-python briefing.py --editorial-packet --output-file outputs/editorial_packet.json
-
-# 查看各日期已有状态（不会触发历史补做）
-.venv/bin/python scripts/scheduled_briefing.py --check
-
-# 检查 Codex 精编后的每条链接是否紧跟具体中文概括
-python skills/daily-briefing/scripts/validate-briefing.py outputs/briefing_YYYY-MM-DD.md
-
-# 只看过去 48 小时的模型发布与模型更新
-python briefing.py --mode models --hours 48 --format markdown
-
-# 只看过去 7 天 AI 视频赛道的产品与功能更新
-python briefing.py --mode products --focus "AI视频" --hours 168 --format markdown
-
-# 只看过去 24 小时的应用落地、采用和增长信号
-python briefing.py --mode applications --hours 24 --format markdown
-
-# 只看最近 7 天 AI 融资、并购、IPO 和财报
-python briefing.py --mode funding --hours 168 --format markdown
-
-# 生成包含上中下游、跨层联动、应用和资本事件的产业简报
-python briefing.py --mode industry --hours 24 --format markdown
-
-# 只看过去 24 小时可能爆火的 Agent 新闻
-python briefing.py --mode hotspots --focus "Agent" --hours 24 --format markdown
-
-# 临时调试，不读写跨日历史
-python briefing.py --no-save --no-history
-
-# 记录反馈：目标可以是 item_key、完整链接或唯一标题
-python briefing.py --feedback "https://example.com/item" --feedback-action saved
-python briefing.py --feedback "标题" --feedback-action published --feedback-note "已发 X"
-python briefing.py --feedback "标题" --feedback-action dismissed
-
-# 生成最近 7 天周复盘
-python briefing.py --weekly-review
-
-# 周复盘只打印，不保存
-python briefing.py --weekly-review --no-save
-
-# 指定输出文件
-python briefing.py --format markdown --output-file outputs/today.md
+.venv/bin/python -m ai_daily_briefing.delivery \
+  --markdown outputs/briefing_YYYY-MM-DD.md \
+  --preview /tmp/briefing-email.html
 ```
 
-## 配置
+预览不会发送。配置 SMTP、修改名单和手动发送见 [EMAIL_SETUP.md](EMAIL_SETUP.md)。实际名单为 `email/recipients.txt`，每行一个地址，发送前去重。邮件逐人发送，其他收件地址不公开。
 
-编辑 [config.yaml](./config.yaml)：
+也可执行 `./scripts/install-codex-skill.sh` 安装本地 skill，再调用 `$daily-briefing`。助手只使用本地项目，不会自动克隆旧上游；单独安装 skill 时可设置 `DAILY_BRIEFING_PROJECT` 指向本仓库。
 
-```yaml
-sources:
-  ai_news: "https://techcrunch.com/category/artificial-intelligence/"
-  ai_official:
-    - name: "OpenAI"
-      url: "https://openai.com/news/rss.xml"
-    - name: "Google DeepMind"
-      url: "https://deepmind.google/blog/rss.xml"
-    - name: "Hugging Face"
-      url: "https://huggingface.co/blog/feed.xml"
-  venture_news: "https://techcrunch.com/category/venture/"
-  github_trending: "https://github.com/trending"
-  hacker_news:
-    url: "https://hn.algolia.com/api/v1/search"
-    queries: ["AI agent", "LLM", "OpenAI", "Claude"]
-  arxiv:
-    url: "https://export.arxiv.org/api/query"
-    query: "cat:cs.AI OR cat:cs.CL OR cat:cs.LG"
-  huggingface_models: "https://huggingface.co/api/models"
-  official_model_orgs:
-    - name: "OpenAI"
-      author: "openai"
-    - name: "Meta Llama"
-      author: "meta-llama"
-    - name: "Qwen"
-      author: "Qwen"
-    - name: "DeepSeek"
-      author: "deepseek-ai"
-  model_changelogs:
-    - name: "Mistral AI"
-      url: "https://docs.mistral.ai/resources/changelogs"
-      parser: "mistral"
-    - name: "QwenCloud"
-      url: "https://docs.qwencloud.com/changelog/models"
-      parser: "qwen"
-  industry_feeds:
-    - name: "NVIDIA Blog"
-      url: "https://blogs.nvidia.com/feed/"
-      track: "infrastructure"
-      layer_hint: "upstream"
-      authority: "official"
-    - name: "Product Hunt"
-      url: "https://www.producthunt.com/feed"
-      track: "applications"
-      layer_hint: "downstream"
-      authority: "community"
-      discovery_only: true
-    - name: "Crunchbase News"
-      url: "https://news.crunchbase.com/feed/"
-      track: "capital"
-      layer_hint: "downstream"
-      authority: "media"
-      discovery_only: true
-  aihot: "https://aihot.today/ai-news"
+## 每日规则与定时任务
 
-output:
-  format: "markdown"
-  language: "zh"
-  output_dir: "outputs"
+- 北京时间每天 08:00 启动；消息窗口为前一日 08:00（含）至当日 08:00（不含），报告日期取窗口结束日。
+- 最多 80 条原始候选 → 最多 30 条短名单 → 核验后最多 10 条。采集不按关键词打分筛选，各内容类别没有固定名额。
+- 上期已发送事件默认排除；有新版本、新可用性、新基准或重大进展才允许再次收录。证据不足时少发，不凑数。
+- 每条分别包含 2–3 句「概述」和 2–3 句「技术总结」，保留原始链接。邮件主题为 `AI前沿日报｜YYYY-MM-DD`。
+- 最终只保存 `outputs/briefing_YYYY-MM-DD.md`。邮件 HTML 和纯文本正文在内存中生成。
+- 阶段失败后保留进度，按 10、30、60 分钟设置重试等待，由每小时检查触发。自动恢复仅处理当天，跨日不补做。
+- 日期、收件地址和可选修订编号组成发送记录，重试只向尚未成功的地址发送。
 
-collection:
-  general_feed_per_source: 4
-  industry_feed_per_source: 4
-  official_model_per_org: 2
-  model_changelog_per_source: 3
-  official_x_candidates: 8
-  official_x_api_results_per_request: 10
-
-pipeline:
-  candidate_pool_max: 80
-  shortlist_size: 30
-  final_report_max: 10
-
-quality:
-  max_feed_age_days: 10
-  model_release_max_age_days: 14
-  funding_min_source_count: 2
-  similarity_threshold: 0.76
-  min_similarity_tokens: 4
-
-history:
-  enabled: true
-  database: "data/briefing_history.sqlite3"
-```
-
-## 输出格式
-
-支持三种格式，默认是 `markdown`：
-
-- `markdown`：默认，带可点击链接，适合文章草稿、公众号、飞书、Obsidian 二次整理
-- `text`：适合 Telegram、微信、即时消息
-- `json`：适合接到自动化工作流里继续处理
-
-默认 Markdown 结构：
-
-```text
-相比昨天的新变化
-AI 产业链全景
-产业链联动
-最新模型发布与更新
-产品与工具更新
-应用层趋势
-可能爆火的 AI 新闻
-AI 投融资与商业化
-模型公司官方账号动态
-今日必须看
-适合发 X 的选题
-B端/商业机会
-持续跟踪
-X 草稿
-AI 热点
-投资 & 经济
-GitHub 优质项目
-今日选题素材
-支持这个项目 / Support the Project
-```
-
-## 项目结构
-
-```text
-briefing.py        # CLI 和核心抓取逻辑
-briefing_store.py  # SQLite 跨日历史与排名轨迹
-config.yaml        # 数据源、输出格式、数量限制
-CODEX.md           # Codex/agent 运行说明
-AGENTS.md          # 给 Codex 的仓库维护指令
-scripts/           # Codex Skill 安装脚本
-skills/daily-briefing/ # 可直接安装和调用的 Codex Skill
-tests/             # 单元测试
-outputs/           # 生成结果，本地目录，不提交 Git
-```
-
-反馈动作对应关系：
-
-| 动作 | 含义 | 对排序的影响 |
-| --- | --- | --- |
-| `opened` | 打开阅读 | 轻微正向 |
-| `saved` | 收藏 | 正向 |
-| `drafted` | 写成草稿 | 较强正向 |
-| `published` | 已经发布 | 最强正向 |
-| `dismissed` | 没价值 | 负向 |
-
-反馈影响有上下限，只调整同一条、同一来源和同一类别，不会覆盖五维基础评分。
-
-## 其他 Agent 使用
-
-根目录的 [SKILL.md](./SKILL.md) 保留给其他 Agent 兼容使用；Codex 的标准 Skill 位于 [skills/daily-briefing/SKILL.md](./skills/daily-briefing/SKILL.md)。所有入口共用同一个 Python 内核：
+现有 macOS LaunchAgent 配置位于 `~/Library/LaunchAgents/com.kxzhang.ai-briefing-email-daily.plist`，每天 08:00 启动并每 3600 秒检查一次。该文件属于本机配置，新机器需另行安装定时任务。08:00 是启动时间，邮件在完成编辑后送达；睡眠或断网可能延迟运行。
 
 ```bash
-python briefing.py --format markdown
+launchctl print gui/$(id -u)/com.kxzhang.ai-briefing-email-daily
+tail -n 80 ~/Library/Logs/ai-daily-briefing/email-daily.log
+tail -n 80 ~/Library/Logs/ai-daily-briefing/email-daily-error.log
 ```
 
-## 开发验收
+## 文件与保留期限
 
-改完代码后至少跑：
+| 位置 | 用途与保留策略 |
+| --- | --- |
+| `outputs/` 及仓库根目录的日期报告 | 最近 30 个自然日，含今天；自动直接删除更早文件 |
+| `~/Library/Application Support/ai-daily-briefing/runs/YYYY-MM-DD/` | 候选、短名单、核验进度、草稿与阶段状态，继续保留 |
+| `~/Library/Logs/ai-daily-briefing/` | 日志与 `email-state.json` 发送账本，继续保留 |
+| `email/recipients.txt` | 实际收件人，不进入 Git |
+| `~/.config/ai-daily-briefing/email.env` | SMTP 配置；密码可存 macOS 钥匙串，不进入 Git |
 
-```bash
-python -m compileall briefing.py briefing_store.py
-python -m unittest discover -s tests
-python briefing.py --dry-run --no-save
-```
+保留天数由 `output.retention_days` 配置，默认 30。按报告文件名中的日期计算，不依赖修改时间。每次定时启动或采集器保存文件时清理；只匹配带合法日期的 `briefing_`、`candidates_`、`editorial_packet_`、`weekly_review_` 文件及 MD、HTML、TXT、JSON 扩展名，不递归、不跟随符号链接、不清理仓库外目录。
 
-如果改了抓取逻辑，再跑一次：
-
-```bash
-python briefing.py --no-save
-```
-
-## License
-
-MIT
-# 当前采集与编辑约定
-
-默认启用 `editorial.raw_candidates`：采集阶段不按 AI、行业或研究关键词删除内容。
-各来源只设置请求安全上限，不给模型、产品、基础设施、融资等类别预分配名额。候选汇总去重后按来源轮流取近期条目，保留原始标题、摘要、链接及日期，最多 80 条；定时任务将当天候选包永久保存在本机状态目录。
-Python 输出为待编辑候选包，不自动生成规则 Top 10。第一阶段由当前编辑 Agent 从候选中选出 30 条，仅记录入选 ID，不逐条撰写长理由。
-第二阶段只核验这 30 条，保存核验进度和草稿，最终选择最多 10 条；失败后可从已有阶段继续。
-这一步是编辑判断，不是多个独立模型投票；来源缺摘要时需要打开原文。
+[日报 skill](skills/daily-briefing/SKILL.md) 保存编辑规则，[AGENTS.md](AGENTS.md) 保存维护约定。项目仓库：[zksainx/ai-daily-briefing](https://github.com/zksainx/ai-daily-briefing)。本地日报、候选包和周报均被 Git 忽略。

@@ -1,5 +1,6 @@
 import os
 import subprocess
+import sys
 import tempfile
 import unittest
 from pathlib import Path
@@ -10,6 +11,9 @@ SKILL_DIR = ROOT / "skills" / "daily-briefing"
 
 
 class CodexSkillTests(unittest.TestCase):
+    def setUp(self):
+        self.environment = dict(os.environ, BRIEFING_PYTHON=sys.executable)
+
     def test_skill_has_codex_metadata(self):
         skill = (SKILL_DIR / "SKILL.md").read_text(encoding="utf-8")
         metadata = (SKILL_DIR / "agents" / "openai.yaml").read_text(
@@ -19,15 +23,9 @@ class CodexSkillTests(unittest.TestCase):
         self.assertTrue(skill.startswith("---\nname: daily-briefing\n"))
         self.assertIn("Generate a source-linked Chinese AI industry", skill)
         self.assertIn("Do not use a personal profile", skill)
-        self.assertIn("every linked item is immediately followed", metadata)
+        self.assertIn("概述", metadata)
+        self.assertIn("技术总结", metadata)
         self.assertIn("$daily-briefing", metadata)
-
-    def test_compatibility_skill_matches_current_counts_and_validation(self):
-        skill = (ROOT / "SKILL.md").read_text(encoding="utf-8")
-
-        self.assertIn("19 个基础模型发布页", skill)
-        self.assertIn("62 个中美模型公司", skill)
-        self.assertIn("validate-briefing.py", skill)
 
     def test_runner_is_portable(self):
         runner = SKILL_DIR / "scripts" / "run-daily-briefing.sh"
@@ -36,13 +34,14 @@ class CodexSkillTests(unittest.TestCase):
         self.assertTrue(os.access(runner, os.X_OK))
         self.assertNotIn("/Users/rion", source)
         self.assertIn("DAILY_BRIEFING_PROJECT", source)
-        self.assertIn("ai-daily-briefing.git", source)
+        self.assertNotIn("git clone", source)
 
     def test_runner_generates_markdown_in_dry_run(self):
         runner = SKILL_DIR / "scripts" / "run-daily-briefing.sh"
         result = subprocess.run(
             ["bash", str(runner), "--dry-run", "--no-save"],
             cwd=ROOT,
+            env=self.environment,
             capture_output=True,
             text=True,
             timeout=120,
@@ -70,6 +69,7 @@ class CodexSkillTests(unittest.TestCase):
                 "48",
             ],
             cwd=ROOT,
+            env=self.environment,
             capture_output=True,
             text=True,
             timeout=120,
@@ -92,6 +92,7 @@ class CodexSkillTests(unittest.TestCase):
                 "industry",
             ],
             cwd=ROOT,
+            env=self.environment,
             capture_output=True,
             text=True,
             timeout=120,
@@ -108,9 +109,8 @@ class CodexSkillTests(unittest.TestCase):
 
         self.assertTrue(os.access(renderer, os.X_OK))
         self.assertNotIn("/Users/rion", source)
-        self.assertIn("briefing_html", source)
+        self.assertIn("ai_daily_briefing.html", source)
         self.assertIn("DAILY_BRIEFING_PROJECT", source)
-        self.assertIn("daily-briefing-runtime", source)
 
         with tempfile.TemporaryDirectory() as tmpdir:
             markdown = Path(tmpdir) / "briefing.md"
@@ -123,7 +123,7 @@ class CodexSkillTests(unittest.TestCase):
             )
             result = subprocess.run(
                 [
-                    str(ROOT / ".venv" / "bin" / "python"),
+                    sys.executable,
                     str(renderer),
                     str(markdown),
                     "--output-file",

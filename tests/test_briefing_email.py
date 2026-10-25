@@ -3,7 +3,7 @@ import unittest
 from unittest.mock import MagicMock, patch
 from pathlib import Path
 
-from briefing_email import (
+from ai_daily_briefing.email import (
     SmtpSettings,
     delivery_key,
     load_recipients,
@@ -81,7 +81,7 @@ class BriefingEmailTests(unittest.TestCase):
             delivery_key("2026-09-17", "one@example.com", "summary-tech-v2"),
         )
 
-    @patch("briefing_email.smtplib.SMTP_SSL")
+    @patch("ai_daily_briefing.email.smtplib.SMTP_SSL")
     def test_smtp_sends_individual_messages_and_reports_each_success(self, smtp_ssl):
         client = MagicMock()
         smtp_ssl.return_value = client

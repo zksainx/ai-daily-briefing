@@ -1,75 +1,56 @@
-# 邮件推送方案
+# 邮件配置
 
-日报邮件直接把 Top 10 写入正文，收件人无需下载附件。邮件使用内联样式、表格布局和纯文本备用正文，兼容常见网页邮箱、Outlook 和手机邮件客户端；不包含 JavaScript。
+日报从最终 Markdown 生成 HTML 邮件正文和纯文本备用正文，不产生独立网页文件。主题为 `AI前沿日报｜YYYY-MM-DD`；条目数字放在标题内，每条分别包含「概述」和「技术总结」，各 2–3 句。
 
-## 工作流
-
-1. 定时任务永久保存最多 80 条原始候选；第一阶段只选 30 条短名单，第二阶段核验短名单并生成最多 10 条的 `briefing_YYYY-MM-DD.md`。
-2. 候选包、短名单、核验进度和草稿保存在本机状态目录以便断点恢复；Markdown 仍是唯一对外发布的日报内容文件。邮件 HTML 和纯文本正文在内存中生成，不保存独立网页 HTML。
-3. 报告文件发布成功后，向收件人逐封发送，地址不会相互暴露。
-4. 每个“报告日期 + 收件地址”成功后立即写入本地发送账本；任务重试只补发尚未成功的地址。
-5. 采集、选 30、核验写稿和邮件阶段各自保存进度；失败后按 10、30、60 分钟补跑，邮件重试复用 MD，无需重新采集和选稿。
+定时和文件保留规则见 [README.md](README.md)。
 
 ## 收件人
 
-真实名单保存在被 Git 忽略的 `email/recipients.txt`，每行一个地址，可使用 `#` 写注释：
+实际名单是 `email/recipients.txt`，每行一个地址，支持空行和 `#` 注释。发送前去重，每人收到独立邮件，其他地址不公开。文件已被 Git 忽略。
 
 ```text
 member1@example.com
 member2@example.com
 ```
 
-新增组员只需追加一行。发送时每人收到独立邮件，不使用公开抄送。
-
 ## 发件配置
 
-建议使用专门的发件邮箱和 SMTP 应用密码。交大邮箱官方 SMTP 配置为 `mail.sjtu.edu.cn:465`，使用 SSL。将非敏感配置保存到：
-
-```text
-~/.config/ai-daily-briefing/email.env
-```
-
-参考 `email/email.env.example`，然后限制文件权限：
+将 SMTP 配置放在 `~/.config/ai-daily-briefing/email.env`，参考 [配置模板](email/email.env.example)：
 
 ```bash
+mkdir -p ~/.config/ai-daily-briefing
+cp email/email.env.example ~/.config/ai-daily-briefing/email.env
 chmod 600 ~/.config/ai-daily-briefing/email.env
 ```
 
-在 macOS 上把密码写入 Keychain，命令会在终端中安全提示输入，不要把密码发到聊天中：
+已有配置无需再次复制。填写 `BRIEFING_EMAIL_FROM`、`BRIEFING_EMAIL_REPLY_TO`、`BRIEFING_SMTP_HOST`、端口、安全协议、SMTP 用户名。交大邮箱当前配置为 `mail.sjtu.edu.cn:465`、`ssl`；SMTP 用户名使用发件邮箱完整地址。
+
+macOS 密码放在钥匙串，账户名须与 SMTP 用户名一致。下面命令会提示输入密码：
 
 ```bash
 security add-generic-password -U \
-  -a "你的SMTP用户名" \
+  -a "你的发件邮箱完整地址" \
   -s "ai-daily-briefing-smtp" \
   -w
 ```
 
-程序通过 `BRIEFING_SMTP_KEYCHAIN_SERVICE` 读取该密码。密码和 API Token 不写入仓库、`config.yaml` 或 LaunchAgent plist。若未来使用自有域名群发，应同时配置 SPF、DKIM 和 DMARC。
+环境文件中保留 `BRIEFING_SMTP_KEYCHAIN_SERVICE=ai-daily-briefing-smtp`，确认配置后设置 `BRIEFING_EMAIL_ENABLED=1`。不要把密码或 Token 写进仓库或 plist。
 
-## 预览和测试
+## 预览与手动发送
 
-仅生成预览，不发送：
+将下面的 `YYYY-MM-DD` 替换为已有报告日期：
 
 ```bash
+# 仅预览，不发送；这个临时 HTML 可自行删除
 .venv/bin/python scripts/send_briefing_email.py \
-  --markdown outputs/briefing_2026-09-17.md \
+  --markdown outputs/briefing_YYYY-MM-DD.md \
   --preview /tmp/briefing-email.html
-```
 
-检查预览后，在环境文件中设置 `BRIEFING_EMAIL_ENABLED=1`，发送到当前测试名单：
-
-```bash
+# 向当前收件人名单发送
 .venv/bin/python scripts/send_briefing_email.py \
-  --markdown outputs/briefing_2026-09-17.md \
-  --send
+  --markdown outputs/briefing_YYYY-MM-DD.md --send
 ```
 
-同一天重复运行默认不会重发。只有人工确认需要重复测试时才添加 `--force`。
+成功发送后立即记入 `~/Library/Logs/ai-daily-briefing/email-state.json`，同日已成功的地址默认跳过。只有明确要重发时才使用 `--force`；发送补充稿时可用 `--delivery-revision` 建立独立发送记录。不要删除发送账本来重发邮件。
 
-## 定时发送
-
-日报编辑通过 `codex exec --model gpt-5.6-terra -c 'model_reasoning_effort="xhigh"'` 固定模型和推理强度，不随全局默认模型变化。
-
-`scripts/scheduled_briefing.py` 已在日报发布后调用邮件发送器。自动运行只处理当天报告：08:00 后的重试仅继续当天任务，不扫描或补做历史缺失日期；历史日期只有在人工传入 `--report-date YYYY-MM-DD` 时才会处理。运行状态位于 `~/Library/Application Support/ai-daily-briefing/runs/YYYY-MM-DD/`，候选包不会再放入临时目录。
-
-LaunchAgent `com.kxzhang.ai-briefing-email-daily` 每天北京时间 08:00 启动日报，并每 1 小时执行一次轻量恢复检查。报告日期按窗口结束日命名，采集范围为前一日 08:00（含）至当日 08:00（不含）。08:00–23:59 的恢复检查只处理当天报告；00:00–07:59 直接退出，不再重试前一天或更早的任务。它长期生效，没有结束日期。08:00 是任务启动时间，实际邮件会在采集、两阶段筛选和核验完成后送达。
+邮件里的退订入口是回复邮件请求移除名单，需要维护者从 `email/recipients.txt` 删除对应地址；没有网站自动退订服务。

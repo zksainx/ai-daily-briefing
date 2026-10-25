@@ -1,4 +1,4 @@
 interface:
   display_name: "AI Daily Briefing"
-  short_description: "生成 AI Markdown 简报与可交互 HTML 阅读界面"
-  default_prompt: "Use $daily-briefing to generate a source-linked AI briefing for my requested time window. Cover official model and product updates, the upstream-to-downstream industry chain, application adoption, funding and commercial events, and potentially viral stories. Save a clickable Markdown document in which every linked item is immediately followed by a specific one- or two-sentence Chinese explanation of who did what and why it matters. After validation, also render the final Markdown as a standalone interactive HTML reader and return links to both files."
+  short_description: "生成 AI 工业界中文邮件日报，包含来源核验、新闻概述与技术总结"
+  default_prompt: "Use $daily-briefing 生成今日 AI 工业界日报，按既定时间窗口完成候选、短名单与 Top 10 核验，每条包含概述和技术总结，保存最终 Markdown。"

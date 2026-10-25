@@ -1,7 +1,7 @@
 import unittest
 from unittest.mock import patch
 
-from briefing import DailyBriefing
+from ai_daily_briefing.collector import DailyBriefing
 
 
 class RawCandidateTests(unittest.TestCase):

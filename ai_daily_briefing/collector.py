@@ -30,7 +30,8 @@ import requests
 import yaml
 from bs4 import BeautifulSoup
 
-from briefing_store import BriefingStore
+from .store import BriefingStore
+from .retention import prune_reports, retention_days_from_config
 
 
 REPOSITORY_URL = "https://github.com/Rion-Wu-tech/ai-daily-briefing"
@@ -428,6 +429,7 @@ DEFAULT_CONFIG: Dict[str, Any] = {
         "format": "markdown",
         "language": "zh",
         "output_dir": "outputs",
+        "retention_days": 30,
     },
     "limits": {
         "ai_news": 10,
@@ -5095,7 +5097,7 @@ class DailyBriefing:
         if output_format == "markdown":
             return self._format_markdown(data)
         if output_format == "html":
-            from briefing_html import render_markdown_html
+            from .html import render_markdown_html
 
             return render_markdown_html(
                 self._format_markdown(data),
@@ -6266,6 +6268,14 @@ def main(argv: Optional[List[str]] = None) -> int:
     output_dir = args.output_dir or briefing.config.get("output", {}).get(
         "output_dir", "."
     )
+    if not args.no_save and not args.feedback:
+        removed = prune_reports(
+            Path(__file__).resolve().parents[1],
+            Path(output_dir),
+            retention_days=retention_days_from_config(briefing.config),
+        )
+        if removed:
+            print(f"已清理 {len(removed)} 个过期报告文件。", file=sys.stderr)
 
     if args.feedback:
         try:
@@ -6301,7 +6311,7 @@ def main(argv: Optional[List[str]] = None) -> int:
             return 2
         output_format = args.format or "markdown"
         if output_format == "html":
-            from briefing_html import render_markdown_html
+            from .html import render_markdown_html
 
             markdown_output = briefing.format_weekly_review(data, "markdown")
             output = render_markdown_html(

@@ -1,431 +1,131 @@
-<p align="center">
-  <a href="./README.md">简体中文</a> | <strong>English</strong>
-</p>
+# AI Frontier Daily Briefing
 
-# AI Daily Briefing
+[中文](README.md) | [English](README_EN.md)
 
-A daily intelligence system for the AI industry. It collects candidate signals from first-party vendors, infrastructure providers, application products, capital markets, media outlets, developer communities, and open-source ecosystems, then turns them into a source-linked Markdown briefing for email delivery. It also produces a structured editorial packet that Codex can refine into a polished final edition.
+A Chinese email digest of AI industry developments across domestic and international companies: models, multimodal and world models, embodied AI, agents, products, infrastructure, deployment, and commercial events. Pure academic research and Web3 are excluded.
 
-Every retained item is followed immediately by a concise Chinese explanation covering who did what and the most important result or impact, so readers can understand the event without opening the source link.
-
-After Codex saves the briefing, a bundled Markdown validator rejects linked items that lack a Chinese explanation, contain only metadata, or use known generic filler.
-
-> **Recommended workflow: enter `$daily-briefing Generate today's briefing` directly in Codex. No Hermes or Telegram required.**
-
-## Two Output Formats
-
-Each briefing can be delivered as a clickable Markdown document and a searchable, filterable, bookmarkable interactive HTML reader. The HTML output is a standalone file that opens directly on desktop and mobile browsers.
-
-<table>
-  <tr>
-    <th width="50%">Markdown document</th>
-    <th width="50%">Interactive HTML</th>
-  </tr>
-  <tr>
-    <td><img src="docs/assets/markdown-briefing-preview.png" alt="AI Daily Briefing Markdown document preview"></td>
-    <td><img src="docs/assets/html-briefing-preview.png" alt="AI Daily Briefing interactive HTML preview"></td>
-  </tr>
-</table>
-
-## Use Directly in Codex (Recommended)
-
-Clone the repository and install the bundled Codex Skill:
-
-```bash
-git clone https://github.com/Rion-Wu-tech/ai-daily-briefing.git
-cd ai-daily-briefing
-./scripts/install-codex-skill.sh
-```
-
-Open a new Codex task, then enter:
+## Architecture
 
 ```text
-$daily-briefing Generate today's briefing
+ai-daily-briefing/
+├── ai_daily_briefing/        # Python application package
+│   ├── __main__.py          # Collector CLI: python -m ai_daily_briefing
+│   ├── collector.py         # Sources, normalization, dates, deduplication, candidate packets
+│   ├── workflow.py          # Two-stage editing, verification, recovery, publication
+│   ├── delivery.py          # Email preview and delivery CLI
+│   ├── email.py             # Email rendering, SMTP, recipients, delivery ledger
+│   ├── store.py             # SQLite history and source-health records
+│   ├── retention.py         # 30-day repository report retention
+│   └── html.py              # Optional standalone HTML reader
+├── scripts/                 # Stable launch wrappers and skill installer
+├── skills/daily-briefing/    # Editorial rules, collection helper, Markdown validator
+├── tests/                   # Unit and command-entrypoint tests
+├── email/                   # Configuration templates and local recipient list
+├── outputs/                 # Final Markdown reports, excluded from Git
+├── config.yaml              # Sources, collection caps, 80→30→10 limits, retention
+├── requirements.txt
+├── EMAIL_SETUP.md           # SMTP and email instructions, in Chinese
+└── .github/workflows/       # CI checks
 ```
 
-You can also specify the scope:
+Data flow: sources → up to 80 raw candidates → up to 30 shortlisted candidates → verification and up to 10 final stories → Markdown → email bodies → individual delivery and ledger updates.
 
-```text
-$daily-briefing Find the hottest AI topics from the past 48 hours
-$daily-briefing Find model releases from the past 24 hours using official sources only
-$daily-briefing Generate a full AI industry-chain briefing for the past 24 hours
-$daily-briefing Find AI application adoption and funding from the past seven days
-$daily-briefing Generate this week's briefing review
-```
+Business logic lives in the package. `scripts/scheduled_briefing.py` and `scripts/send_briefing_email.py` remain thin launch wrappers. The existing macOS LaunchAgent keeps its original script path.
 
-Codex fetches, normalizes, deduplicates, scores, and edits the source pool, then saves the final result to:
+## Setup and validation
 
-```text
-outputs/briefing_YYYY-MM-DD.md
-outputs/briefing_YYYY-MM-DD.html
-```
+Use Python 3.11+. The complete editorial workflow also requires an installed, authenticated Codex CLI. Sending email requires SMTP configuration.
 
-News titles and source links are clickable. The standalone HTML reader adds local search, section navigation, confidence and industry-layer filters, browser-local bookmarks, theme switching, Markdown download, and print/PDF support without a server or external CDN. The Python layer handles reliable collection and deterministic fallback output, while the current Codex model performs final selection, explanations, section planning, and X draft generation.
-
-If a Skill with the same name already exists, explicitly back it up and replace it:
-
-```bash
-./scripts/install-codex-skill.sh --force
-```
-
-## Features
-
-- AI news from TechCrunch plus official OpenAI, Google DeepMind, and Hugging Face updates
-- A dedicated latest-model section backed by vendor sites, official changelogs, official model cards, and first-party open-weight releases
-- Product and tool updates covering new AI features, APIs, pricing, workflows, and major integrations even when no new model is involved
-- A full industry-chain view covering upstream compute and infrastructure, midstream models and platforms, and downstream applications and services
-- Application-layer signals covering customer adoption, user growth, industry deployment, pricing, revenue, and commercial traction
-- AI funding coverage for financings, acquisitions, IPOs, and earnings, with explicit verification status for material figures
-- Cross-layer connection cards that link shared themes without claiming an unsupported partnership or causal relationship
-- Potentially viral AI stories selected from company announcements, open-source projects, research breakthroughs, funding, industry disputes, and fast-rising community discussions
-- Tracking for 42 official Hugging Face organizations, focused on active US and China model teams
-- 19 foundation-model release pages plus 38 official update pages for coding, agents, multimodal models, and model platforms
-- An official-account radar for 62 model-company and AI-product X accounts; Codex can search them directly, while Python can use the optional X API integration
-- Dedicated AI coding and agent coverage for Claude Code, Codex, Cursor, Copilot, Cognition/Devin, Replit, and Manus
-- Dedicated multimodal coverage for Runway, Stability AI, FLUX, Midjourney, Luma, Pika, Kling, and Vidu
-- Additional signals from Hacker News, Hugging Face Trending, and AI HOT
-- Automated industry feeds from NVIDIA, AMD, MLCommons, AWS, Google Cloud, Product Hunt, Crunchbase News, TechCrunch Venture, and Data Center Dynamics, with CoreWeave and sources such as 机器之心 routed to Codex when no stable RSS feed is available
-- China-first verification routes that include 36Kr, IT桔子, and HKEX disclosures; adoption and funding figures must still be confirmed with a primary source
-- Official tracking through the Anthropic sitemap and releases from Codex, Claude Code, Gemini CLI, and Transformers
-- Venture and economic signals from TechCrunch Venture
-- High-quality open-source projects from GitHub Trending
-- Daily topic ideas that turn news into publishable Chinese content angles
-- Codex-friendly offline validation with `--dry-run`, unit tests, and stable output paths
-- A concise Chinese explanation for every news item and project, without repetitive labels
-- Opening sections for changes since yesterday, the AI industry chain, cross-layer connections, model releases, product updates, application trends, AI funding and commercialization, potentially viral stories, must-read items, X opportunities, B2B opportunities, and watchlist signals
-- Final Top 10 selection by Codex based on industry significance, timeliness, source credibility, technical substance, and source diversity, without personal-profile scoring
-- Confidence labels: `Officially confirmed`, `Corroborated by multiple sources`, and `Single-source signal`
-- Scheduled freshness: start daily at 08:00 Asia/Shanghai and collect the half-open window from the previous 08:00 (inclusive) to the report-date 08:00 (exclusive); exclude events sent in the previous report unless there is a new version, availability change, benchmark result, or material development
-- X drafts in three formats: single post, thread, and visual/video script
-- SQLite history for first seen, last seen, repeat count, source count, and daily ranking; repeated runs on the same day do not double-count
-- Feedback actions for opened, saved, drafted, published, or dismissed items, allowing future ranking to learn from real choices
-- Source health tracking for success rate, item count, and latency, with a seven-day health report
-- Weekly reviews covering persistent signals, content feedback, preferred categories, source health, and next-week actions
-- `--editorial-packet` for a Codex-ready candidate package; the current Codex model handles final editorial judgment while Python remains the deterministic fallback
-- A standard Codex Skill, UI metadata, and portable runner bundled in the repository
-- Automatic filtering of off-topic AI stories and merging of duplicate links or similar headlines
-- Alternating media and official sources, with graceful degradation when one source fails
-- A concise bilingual Star invitation at the end of each briefing, using the single canonical repository link
-
-### Two-Axis Intelligence Model
-
-Every item answers two separate questions:
-
-- `industry_layer`: whether the company or product sits upstream, midstream, or downstream
-- `event_types`: whether the event is a model release, product update, adoption signal, funding, acquisition, earnings report, or policy change
-
-Capital is not a fourth industry layer. A downstream AI workflow company remains downstream after a financing; it simply gains a `funding` event type. This keeps the industry map readable without letting capital news displace product and adoption signals.
-
-## Current First-Party Coverage
-
-| Region | Model organizations and release sources | Official X accounts |
-| --- | --- | --- |
-| United States | OpenAI, Anthropic/Claude, Google DeepMind, Meta AI/Llama, xAI/Grok, Microsoft AI/Phi, NVIDIA, Ai2, Amazon Nova, Perplexity, IBM Granite, Salesforce, Snowflake, Liquid AI, Nous Research, Cerebras, Prime Intellect, Inception, Stability AI, and Black Forest Labs | `@OpenAI`, `@AnthropicAI`, `@claudeai`, `@GoogleDeepMind`, `@AIatMeta`, `@SpaceXAI`, `@grok`, `@MicrosoftAI`, `@NVIDIAAI`, `@allen_ai`, `@AWSCloud`, `@perplexity_ai`, `@IBMResearch`, `@SalesforceDevs`, `@SnowflakeDB`, `@LiquidAI`, `@NousResearch`, `@Cerebras`, `@PrimeIntellect`, `@_inception_ai`, `@StabilityAI`, `@bfl_ai` |
-| China | Qwen, DeepSeek, Z.ai/GLM, Kimi, MiniMax, Tencent Hunyuan, ByteDance Seed, StepFun, Baichuan, 01.AI, Xiaomi MiMo, InternLM, Baidu ERNIE, Huawei Pangu, iFLYTEK Spark, SenseNova, Meituan LongCat, Kuaishou Kolors, OpenBMB/MiniCPM, OpenGVLab/InternVL, BAAI, Ant Ling, Wan, and Skywork | `@Alibaba_Qwen`, `@deepseek_ai`, `@Zai_org`, `@Kimi_Moonshot`, `@MiniMax_AI`, `@StepFun_ai`, `@ByteDanceSeed`, `@TencentHunyuan`, `@Baidu_Inc`, `@01AI_Yi`, `@BaichuanAI`, `@HuaweiCloud1`, `@SenseTimeGroup`, `@Meituan_LongCat`, `@OpenBMB`, `@BAAIBeijing`, `@AntLingAGI`, `@Alibaba_Wan`, `@Skywork_ai` |
-| Other | Mistral AI and Cohere Labs | `@MistralAI`, `@cohere` |
-
-| Product group | Official release sources | Official X accounts |
-| --- | --- | --- |
-| AI coding and agents | Claude Code, OpenAI Codex, Cursor, GitHub Copilot, Cognition/Devin, Replit, and Manus | `@claudeai`, `@OpenAI`, `@cursor_ai`, `@GitHubCopilot`, `@cognition_labs`, `@Replit`, `@ManusAI` |
-| Multimodal models | Runway, Stability AI, Black Forest Labs/FLUX, Midjourney, Ideogram, Luma, Pika, Adobe Firefly, Kling, Vidu, and Wan | `@runwayml`, `@StabilityAI`, `@bfl_ai`, `@midjourney`, `@ideogram_ai`, `@LumaLabsAI`, `@pika_labs`, `@AdobeFirefly`, `@Kling_ai`, `@ViduAI_official`, `@Alibaba_Wan` |
-| Audio and music models | ElevenLabs and Suno | `@ElevenLabs`, `@suno_ai_` |
-| Model platforms and ecosystem | Hugging Face, OpenRouter, Together AI, Snowflake Cortex, and Salesforce AI | `@huggingface`, `@OpenRouter`, `@togethercompute`, `@SnowflakeDB`, `@SalesforceDevs` |
-
-Vendor pages, changelogs, and model cards confirm facts. X is the fast layer for launches, previews, API or pricing notices, and product updates. Interactive full-packet editing can search the configured watchlist without API credentials. The recoverable two-stage scheduled email pipeline requires a Bearer Token for reliable X collection.
-
-To let local Python and the LaunchAgent fetch official-account posts automatically, store the Bearer Token in macOS Keychain. This command prompts for the token securely in Terminal:
-
-```bash
-security add-generic-password -U \
-  -a "x-api" \
-  -s "ai-daily-briefing-x-bearer" \
-  -w
-```
-
-The program reads this Keychain item automatically. Never place the token in `config.yaml`, the LaunchAgent plist, or Git. `X_BEARER_TOKEN` remains available for temporary testing and takes precedence over Keychain.
-
-## Quick Start
-
-```bash
-git clone https://github.com/Rion-Wu-tech/ai-daily-briefing.git
-cd ai-daily-briefing
-
-python3 -m venv .venv
-source .venv/bin/activate
-python -m pip install -r requirements.txt
-```
-
-Run the offline validation first:
-
-```bash
-python briefing.py --dry-run --no-save
-python -m unittest discover -s tests
-```
-
-Run a real fetch and save a Markdown briefing:
-
-```bash
-python briefing.py
-```
-
-The default output path is:
-
-```text
-outputs/briefing_YYYY-MM-DD.md
-```
-
-## Run with Local Python
-
-The project also works without installing the Codex Skill:
+Run from the repository root:
 
 ```bash
 python3 -m venv .venv
-source .venv/bin/activate
-python -m pip install -r requirements.txt
-python briefing.py --dry-run --no-save
-python -m unittest discover -s tests
+.venv/bin/python -m pip install -r requirements.txt
+
+# Offline sample: no network, saved files, or email
+.venv/bin/python -m ai_daily_briefing --dry-run --no-save
+
+# Compile and test
+.venv/bin/python -m compileall -q ai_daily_briefing scripts
+.venv/bin/python -m unittest discover -s tests
 ```
 
-If the dry run and tests pass, run a live collection:
+The old `python briefing.py` command has been replaced by `python -m ai_daily_briefing`. Collector output contains candidates, not the final edited briefing. Briefings remain in Chinese regardless of the documentation language.
+
+## Usage
+
+### Collect and generate
 
 ```bash
-python briefing.py
+# Fetch raw candidates and print JSON; do not save or send
+.venv/bin/python -m ai_daily_briefing --editorial-packet --no-save
+
+# Read status without generating, sending, or deleting reports
+.venv/bin/python -m ai_daily_briefing.workflow --check
+
+# Generate or resume today's workflow, then email the current recipient list
+.venv/bin/python -m ai_daily_briefing.workflow
+
+# Generate or resume without email
+.venv/bin/python -m ai_daily_briefing.workflow --no-send
+
+# Remove expired report files only
+.venv/bin/python -m ai_daily_briefing.workflow --cleanup-only
 ```
 
-See [CODEX.md](./CODEX.md) for the complete agent workflow.
+Use `--report-date YYYY-MM-DD` only for explicitly requested historical work. Completed runs are skipped; these commands do not force regeneration or redelivery.
 
-## Common Commands
+Sources and collection limits are in [config.yaml](config.yaml). Codex is located through PATH; set `BRIEFING_CODEX` to override its executable path. Editorial calls use `gpt-6.1-sol` with `high` reasoning effort.
+
+### Preview email
+
+Replace the date with an existing report date:
 
 ```bash
-# Offline sample data; does not access external websites
-python briefing.py --dry-run
-
-# Plain-text output
-python briefing.py --format text
-
-# Print JSON without saving
-python briefing.py --format json --no-save
-
-# Generate a Codex-ready editorial packet
-python briefing.py --editorial-packet --output-file outputs/editorial_packet.json
-
-# Model launches and updates from the past 48 hours
-python briefing.py --mode models --hours 48 --format markdown
-
-# AI-video product and feature updates from the past seven days
-python briefing.py --mode products --focus "AI video" --hours 168 --format markdown
-
-# Application adoption and growth signals from the past 24 hours
-python briefing.py --mode applications --hours 24 --format markdown
-
-# AI financings, acquisitions, IPOs, and earnings from the past seven days
-python briefing.py --mode funding --hours 168 --format markdown
-
-# Full upstream/midstream/downstream industry view with cross-layer connections
-python briefing.py --mode industry --hours 24 --format markdown
-
-# Potentially viral Agent stories from the past 24 hours
-python briefing.py --mode hotspots --focus "Agent" --hours 24 --format markdown
-
-# Debug without reading or writing cross-day history
-python briefing.py --no-save --no-history
-
-# Record feedback by item key, full URL, or unique title
-python briefing.py --feedback "https://example.com/item" --feedback-action saved
-python briefing.py --feedback "Title" --feedback-action published --feedback-note "Published on X"
-python briefing.py --feedback "Title" --feedback-action dismissed
-
-# Generate a review for the latest seven days
-python briefing.py --weekly-review
-
-# Print the weekly review without saving
-python briefing.py --weekly-review --no-save
-
-# Specify an output file
-python briefing.py --format markdown --output-file outputs/today.md
+.venv/bin/python -m ai_daily_briefing.delivery \
+  --markdown outputs/briefing_YYYY-MM-DD.md \
+  --preview /tmp/briefing-email.html
 ```
 
-## Configuration
+Previewing does not send mail. To configure SMTP:
 
-Edit [config.yaml](./config.yaml):
+1. Copy `email/email.env.example` to `~/.config/ai-daily-briefing/email.env` if no configuration exists, and set file permissions to `600`.
+2. Fill in the sender, reply-to address, SMTP host, port, security mode, and username. Store the password in the macOS Keychain using the service named by `BRIEFING_SMTP_KEYCHAIN_SERVICE`, or configure the supported password environment variable.
+3. Create `email/recipients.txt` with one address per line. Blank lines and `#` comments are supported; addresses are deduplicated.
+4. Enable `BRIEFING_EMAIL_ENABLED=1`, then add `--send` to the delivery command when ready to send.
 
-```yaml
-sources:
-  ai_news: "https://techcrunch.com/category/artificial-intelligence/"
-  ai_official:
-    - name: "OpenAI"
-      url: "https://openai.com/news/rss.xml"
-    - name: "Google DeepMind"
-      url: "https://deepmind.google/blog/rss.xml"
-    - name: "Hugging Face"
-      url: "https://huggingface.co/blog/feed.xml"
-  venture_news: "https://techcrunch.com/category/venture/"
-  github_trending: "https://github.com/trending"
-  hacker_news:
-    url: "https://hn.algolia.com/api/v1/search"
-    queries: ["AI agent", "LLM", "OpenAI", "Claude"]
-  arxiv:
-    url: "https://export.arxiv.org/api/query"
-    query: "cat:cs.AI OR cat:cs.CL OR cat:cs.LG"
-  huggingface_models: "https://huggingface.co/api/models"
-  official_model_orgs:
-    - name: "OpenAI"
-      author: "openai"
-    - name: "Meta Llama"
-      author: "meta-llama"
-    - name: "Qwen"
-      author: "Qwen"
-    - name: "DeepSeek"
-      author: "deepseek-ai"
-  model_changelogs:
-    - name: "Mistral AI"
-      url: "https://docs.mistral.ai/resources/changelogs"
-      parser: "mistral"
-    - name: "QwenCloud"
-      url: "https://docs.qwencloud.com/changelog/models"
-      parser: "qwen"
-  industry_feeds:
-    - name: "NVIDIA Blog"
-      url: "https://blogs.nvidia.com/feed/"
-      track: "infrastructure"
-      layer_hint: "upstream"
-      authority: "official"
-    - name: "Product Hunt"
-      url: "https://www.producthunt.com/feed"
-      track: "applications"
-      layer_hint: "downstream"
-      authority: "community"
-      discovery_only: true
-    - name: "Crunchbase News"
-      url: "https://news.crunchbase.com/feed/"
-      track: "capital"
-      layer_hint: "downstream"
-      authority: "media"
-      discovery_only: true
-  aihot: "https://aihot.today/ai-news"
+Messages are sent individually, so recipients do not see the other addresses. Successful deliveries are recorded immediately. Do not delete the ledger to resend; use `--force` only for an intentional resend, or `--delivery-revision` for a separate supplement. See [EMAIL_SETUP.md](EMAIL_SETUP.md) for detailed commands.
 
-output:
-  format: "markdown"
-  language: "zh"
-  output_dir: "outputs"
+Install the local Codex skill with `./scripts/install-codex-skill.sh`, then invoke `$daily-briefing`. The helper uses a local checkout and never automatically clones the former upstream repository. A separately installed skill can locate this checkout through `DAILY_BRIEFING_PROJECT`.
 
-collection:
-  general_feed_per_source: 4
-  industry_feed_per_source: 4
-  official_model_per_org: 2
-  model_changelog_per_source: 3
-  official_x_candidates: 8
-  official_x_api_results_per_request: 10
+## Daily policy and scheduling
 
-pipeline:
-  candidate_pool_max: 80
-  shortlist_size: 30
-  final_report_max: 10
+- Start at 08:00 Asia/Shanghai. The report covers the previous day's 08:00 inclusive through the report day's 08:00 exclusive. Its date is the closing date.
+- Collect up to 80 candidates, shortlist up to 30, and verify up to 10 final stories. Collection does not use keyword relevance scores or category quotas.
+- Previously sent events are excluded unless there is a new version, availability, benchmark, or material development. Publish fewer stories when evidence is insufficient.
+- Each story has a linked title, a 2–3 sentence overview, and a 2–3 sentence technical summary. The subject is `AI前沿日报｜YYYY-MM-DD`.
+- Save only `outputs/briefing_YYYY-MM-DD.md`. Render HTML and plain-text email bodies in memory.
+- Preserve stage progress. Failed stages use 10-, 30-, and 60-minute retry delays, checked by the hourly scheduler. Automatic recovery only handles the current date; it never backfills older days.
+- The delivery ledger tracks the report date, recipient, and optional revision. Retries skip recipients already sent that delivery.
 
-quality:
-  max_feed_age_days: 10
-  model_release_max_age_days: 14
-  funding_min_source_count: 2
-  similarity_threshold: 0.76
-  min_similarity_tokens: 4
-
-history:
-  enabled: true
-  database: "data/briefing_history.sqlite3"
-```
-
-## Output Formats
-
-Four formats are supported. Markdown is the default, and HTML is the interactive standalone reader:
-
-- `markdown`: clickable links; suitable for article drafts, newsletters, Feishu, and Obsidian
-- `text`: suitable for Telegram, WeChat, and instant messaging
-- `json`: suitable for downstream automation
-- `html`: a standalone interactive reader with search, filters, local bookmarks, theme switching, Markdown download, and print/PDF support
-
-Render structured data directly, or convert the final Codex-edited Markdown so both versions stay identical:
+The existing macOS LaunchAgent is `~/Library/LaunchAgents/com.kxzhang.ai-briefing-email-daily.plist`. It starts at 08:00 and checks every 3600 seconds. This is local machine configuration and must be installed separately on a new machine. Delivery follows completion of editing; sleep or network outages may delay it.
 
 ```bash
-python briefing.py --format html
-python skills/daily-briefing/scripts/render-briefing-html.py outputs/briefing_YYYY-MM-DD.md
+launchctl print gui/$(id -u)/com.kxzhang.ai-briefing-email-daily
+tail -n 80 ~/Library/Logs/ai-daily-briefing/email-daily.log
+tail -n 80 ~/Library/Logs/ai-daily-briefing/email-daily-error.log
 ```
 
-Default Markdown structure:
+## Files and retention
 
-```text
-Changes Since Yesterday
-AI Industry Chain
-Cross-Layer Connections
-Latest Model Releases and Updates
-Product and Tool Updates
-Application-Layer Trends
-Potentially Viral AI News
-AI Funding and Commercialization
-Official Model-Company Accounts
-Must Read
-Suitable for X
-B2B / Business Opportunities
-Watchlist
-X Drafts
-AI News
-Investment & Economy
-GitHub Projects
-Daily Topic Ideas
-Support the Project
-```
+| Location | Purpose and retention |
+| --- | --- |
+| Dated reports in `outputs/` and the repository root | Keep the latest 30 calendar days, including today; permanently delete older files |
+| `~/Library/Application Support/ai-daily-briefing/runs/YYYY-MM-DD/` | Keep candidates, shortlist, verification progress, drafts, and stage state |
+| `~/Library/Logs/ai-daily-briefing/` | Keep logs and the `email-state.json` delivery ledger |
+| `email/recipients.txt` | Local recipient list, excluded from Git |
+| `~/.config/ai-daily-briefing/email.env` | Local SMTP configuration, excluded from Git; passwords may use Keychain |
 
-The generated document currently uses Chinese section labels because the default output language in `config.yaml` is `zh`.
+Set `output.retention_days` to change the default of 30. Age comes from the report date in the filename, not its modification time. Cleanup runs whenever the scheduled workflow starts or the collector saves files. It only matches valid dated `briefing_`, `candidates_`, `editorial_packet_`, and `weekly_review_` files with MD, HTML, TXT, or JSON extensions. It does not recurse, follow symlinks, or clean directories outside the repository.
 
-## Project Structure
-
-```text
-briefing.py        # CLI and core collection logic
-briefing_store.py  # SQLite history and ranking trajectories
-config.yaml        # Sources, output format, and item limits
-CODEX.md           # Codex and agent instructions
-AGENTS.md          # Repository instructions for Codex
-scripts/           # Codex Skill installation scripts
-skills/daily-briefing/ # Installable Codex Skill
-tests/             # Unit tests
-outputs/           # Generated local output; not committed to Git
-```
-
-Feedback actions:
-
-| Action | Meaning | Ranking impact |
-| --- | --- | --- |
-| `opened` | Opened and read | Small positive |
-| `saved` | Saved | Positive |
-| `drafted` | Turned into a draft | Strong positive |
-| `published` | Published | Strongest positive |
-| `dismissed` | Not useful | Negative |
-
-Feedback adjustments are bounded. They affect the same item, source, and category without replacing the five-dimensional base score.
-
-## Other Agents
-
-The root [SKILL.md](./SKILL.md) remains available for compatibility with other agents. The standard Codex Skill lives at [skills/daily-briefing/SKILL.md](./skills/daily-briefing/SKILL.md). Every entry point uses the same Python core:
-
-```bash
-python briefing.py --format markdown
-```
-
-## Development Validation
-
-After changing the code, run at least:
-
-```bash
-python -m compileall briefing.py briefing_store.py
-python -m unittest discover -s tests
-python briefing.py --dry-run --no-save
-```
-
-If collection logic changed, also run:
-
-```bash
-python briefing.py --no-save
-```
-
-## License
-
-MIT
+Editorial instructions live in the [daily briefing skill](skills/daily-briefing/SKILL.md), and maintenance requirements in [AGENTS.md](AGENTS.md). Project repository: [zksainx/ai-daily-briefing](https://github.com/zksainx/ai-daily-briefing). Local briefings, candidate packets, and weekly reports are all excluded from Git.

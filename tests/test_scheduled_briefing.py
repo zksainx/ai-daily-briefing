@@ -5,7 +5,7 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from unittest.mock import patch
 
-from scripts import scheduled_briefing as runner
+from ai_daily_briefing import workflow as runner
 
 
 class ScheduledBriefingTests(unittest.TestCase):
@@ -23,12 +23,12 @@ class ScheduledBriefingTests(unittest.TestCase):
         self.assertEqual(runner.SHORTLIST_SIZE, 30)
         self.assertEqual(runner.FINAL_REPORT_MAX, 10)
 
-    def test_codex_workflow_forces_terra_with_xhigh_reasoning(self):
+    def test_codex_workflow_forces_sol_61_with_high_reasoning(self):
         command = runner.codex_base_command(
             writable_dir=Path("/tmp/briefing-test"), web=False
         )
-        self.assertEqual(command[command.index("--model") + 1], "gpt-5.6-terra")
-        self.assertIn('model_reasoning_effort="xhigh"', command)
+        self.assertEqual(command[command.index("--model") + 1], "gpt-6.1-sol")
+        self.assertIn('model_reasoning_effort="high"', command)
 
     def test_date_range_includes_every_missing_day(self):
         self.assertEqual(
@@ -99,6 +99,12 @@ class ScheduledBriefingTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmpdir, patch.object(
             runner, "LOG_ROOT", Path(tmpdir)
         ), patch.object(
+            runner, "ROOT", Path(tmpdir)
+        ), patch.object(
+            runner, "STATE_ROOT", Path(tmpdir) / "runs"
+        ), patch.object(
+            runner, "OUTPUT_ROOT", Path(tmpdir) / "outputs"
+        ), patch.object(
             runner,
             "datetime",
         ) as mocked_datetime, patch.object(
@@ -114,6 +120,10 @@ class ScheduledBriefingTests(unittest.TestCase):
     def test_automatic_run_before_cutoff_does_nothing(self):
         with tempfile.TemporaryDirectory() as tmpdir, patch.object(
             runner, "LOG_ROOT", Path(tmpdir)
+        ), patch.object(runner, "ROOT", Path(tmpdir)), patch.object(
+            runner, "STATE_ROOT", Path(tmpdir) / "runs"
+        ), patch.object(
+            runner, "OUTPUT_ROOT", Path(tmpdir) / "outputs"
         ), patch.object(runner, "datetime") as mocked_datetime, patch.object(
             runner, "process_day"
         ) as process, patch("sys.argv", ["scheduled_briefing.py"]):
@@ -123,6 +133,25 @@ class ScheduledBriefingTests(unittest.TestCase):
             self.assertEqual(runner.main(), 0)
 
         process.assert_not_called()
+
+    def test_cleanup_only_prunes_without_generating_or_sending(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            outputs = root / "outputs"
+            outputs.mkdir()
+            old = outputs / "briefing_2026-09-25.md"
+            old.write_text("old", encoding="utf-8")
+            with patch.object(runner, "ROOT", root), patch.object(
+                runner, "LOG_ROOT", root / "logs"
+            ), patch.object(runner, "STATE_ROOT", root / "runs"), patch.object(
+                runner, "OUTPUT_ROOT", outputs
+            ), patch.object(runner, "datetime") as clock, patch.object(
+                runner, "process_day"
+            ) as process, patch("sys.argv", ["scheduled_briefing.py", "--cleanup-only"]):
+                clock.now.return_value = datetime(2026, 10, 25, 12, tzinfo=runner.TIMEZONE)
+                self.assertEqual(runner.main(), 0)
+            self.assertFalse(old.exists())
+            process.assert_not_called()
 
     def test_explicitly_skipped_day_is_not_resumed(self):
         day = "2026-09-23"

@@ -331,6 +331,7 @@ output:
   format: "markdown"  # text, markdown, json
   language: "zh"  # zh, en
   output_dir: "outputs"
+  retention_days: 30  # 按报告日期保留最近 30 个自然日（含今天），仅清理仓库内报告
   
 # 采集阶段只做单源/API安全限流，不对模型、产品、融资等内容类别分配名额。
 collection:

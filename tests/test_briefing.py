@@ -13,9 +13,9 @@ from unittest.mock import patch
 
 from bs4 import BeautifulSoup
 
-from briefing import DailyBriefing, parse_args, save_output
-from briefing_html import render_markdown_html
-from briefing_store import BriefingStore
+from ai_daily_briefing.collector import DailyBriefing, parse_args, save_output
+from ai_daily_briefing.html import render_markdown_html
+from ai_daily_briefing.store import BriefingStore
 
 
 class DailyBriefingTests(unittest.TestCase):
@@ -771,12 +771,12 @@ class DailyBriefingTests(unittest.TestCase):
         self.assertGreater(age, timedelta(hours=23, minutes=59))
         self.assertLess(age, timedelta(hours=24, minutes=1))
 
-    @patch("briefing.subprocess.run")
+    @patch("ai_daily_briefing.collector.subprocess.run")
     def test_official_x_token_loads_from_macos_keychain(self, run):
         briefing = DailyBriefing(dry_run=True)
         run.return_value.stdout = "keychain-token\n"
 
-        with patch("briefing.sys.platform", "darwin"), patch.dict(
+        with patch("ai_daily_briefing.collector.sys.platform", "darwin"), patch.dict(
             os.environ,
             {
                 "X_BEARER_TOKEN": "",

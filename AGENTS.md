@@ -1,54 +1,20 @@
-# AGENTS.md - Codex Runbook
+# 仓库维护约定
 
-这个仓库的目标很简单：让用户可以在 Codex、Claude Code、Hermes 或本地 Python 里生成每日 AI 工业界简报。
+本仓库运行「采集候选 → 短名单 → 核验 Top 10 → Markdown → 邮件」工作流，默认用简体中文交流。当前运行方式、时间窗口和文件路径以 [README.md](README.md) 为准；编辑规则见 [日报 skill](skills/daily-briefing/SKILL.md)。
 
-## 默认工作方式
-
-- 默认用简体中文回复，表达自然、直接。
-- 优先保持项目能独立运行：`python briefing.py --dry-run --no-save` 必须可用。
-- 不要擅自修改 `SOUL.md`、`USER.md`、`MEMORY.md`、`memory/*.md`、`HEARTBEAT.md` 这类个人上下文文件，除非用户明确要求。
-- 不要提交每天生成的简报文件；输出应写到 `outputs/` 或 `briefing_*.txt/md/json`，这些已在 `.gitignore`。
-
-## 快速验证
-
-```bash
-python3 -m venv .venv
-source .venv/bin/activate
-python -m pip install -r requirements.txt
-python briefing.py --dry-run --no-save
-python -m unittest discover -s tests
-```
-
-## 常用命令
-
-```bash
-# 离线样例数据，适合 Codex/CI 验证
-python briefing.py --dry-run
-
-# 真实联网抓取，并保存到 outputs/
-python briefing.py
-
-# 输出 Markdown
-python briefing.py --format markdown
-
-# 输出 JSON，不保存文件
-python briefing.py --format json --no-save
-```
+- 保持 `python -m ai_daily_briefing --dry-run --no-save` 可用。采集层输出不能冒充已完成的 Top 10。
+- 不提交日报、收件人名单、SMTP 密码、X Token 或本机运行状态。
+- 业务代码放在 `ai_daily_briefing/`，`scripts/` 只保留启动入口。LaunchAgent 依赖的脚本路径必须可用。
+- 仓库报告默认保留最近 30 个自然日，代码位于 `ai_daily_briefing/retention.py`；不得扩大到仓库外状态、日志和发送账本。
+- 修改文档时同步检查引用，避免重新加入已移除的个人画像、Web3、强制 HTML 或社交平台发稿流程。
+- 手动测试默认不发送邮件；发送必须有用户授权。现有定时任务按既定收件人名单执行。
 
 ## 修改代码后的验收
 
-至少运行：
-
 ```bash
-python -m compileall briefing.py
-python -m unittest discover -s tests
-python briefing.py --dry-run --no-save
+.venv/bin/python -m compileall -q ai_daily_briefing scripts
+.venv/bin/python -m unittest discover -s tests
+.venv/bin/python -m ai_daily_briefing --dry-run --no-save
 ```
 
-如果改了抓取逻辑，再运行一次真实联网命令：
-
-```bash
-python briefing.py --no-save
-```
-
-外部网站页面结构会变化，抓取失败时要优雅降级，不能让整个脚本崩掉。
+修改抓取逻辑时另做一次真实联网验证。外部源失败应保留成功采集结果，并记录失败原因。

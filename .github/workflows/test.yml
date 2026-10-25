@@ -19,7 +19,7 @@ jobs:
           python-version: ${{ matrix.python-version }}
           cache: pip
       - run: python -m pip install -r requirements.txt
-      - run: python -m compileall briefing.py briefing_store.py
+      - run: python -m compileall -q ai_daily_briefing scripts
       - run: python -m unittest discover -s tests
-      - run: python briefing.py --dry-run --no-save > /tmp/daily-briefing.md
-      - run: grep -q '^## 今日必须看' /tmp/daily-briefing.md
+      - run: python -m ai_daily_briefing --dry-run --no-save > /tmp/daily-briefing.md
+      - run: grep -q '^# 原始候选采集' /tmp/daily-briefing.md

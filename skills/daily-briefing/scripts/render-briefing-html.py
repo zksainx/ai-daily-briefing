@@ -10,20 +10,18 @@ from pathlib import Path
 
 
 def project_root() -> Path:
-    codex_home = Path(os.environ.get("CODEX_HOME", Path.home() / ".codex"))
     candidates = [
         Path(os.environ["DAILY_BRIEFING_PROJECT"])
         if os.environ.get("DAILY_BRIEFING_PROJECT")
         else None,
         Path.cwd(),
         Path(__file__).resolve().parents[3],
-        codex_home / "daily-briefing-runtime",
     ]
     for candidate in candidates:
-        if candidate and (candidate / "briefing_html.py").is_file():
+        if candidate and (candidate / "ai_daily_briefing" / "html.py").is_file():
             return candidate.resolve()
     raise FileNotFoundError(
-        "找不到 briefing_html.py。请在 ai-daily-briefing 仓库内运行，"
+        "找不到 ai_daily_briefing/html.py。请在 ai-daily-briefing 仓库内运行，"
         "或设置 DAILY_BRIEFING_PROJECT。"
     )
 
@@ -43,7 +41,7 @@ def main() -> int:
     try:
         root = project_root()
         sys.path.insert(0, str(root))
-        from briefing_html import render_markdown_file
+        from ai_daily_briefing.html import render_markdown_file
 
         input_path = Path(args.markdown_file)
         output_path = Path(args.output_file) if args.output_file else None
